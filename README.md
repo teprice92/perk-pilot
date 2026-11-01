@@ -51,7 +51,7 @@ PerkPilot is a mobile-first web app that plans trips around a household's credit
 Requirements: **Node.js 20.9+** (22 LTS recommended) and npm. PostgreSQL is optional.
 
 ```bash
-cd perkpilot
+git clone https://github.com/teprice92/perk-pilot.git && cd perk-pilot
 npm install            # also runs `prisma generate`
 cp .env.example .env.local
 npm run dev            # http://localhost:3000
@@ -104,7 +104,7 @@ npm run db:seed                  # load the starter rules dataset
 ## Project layout
 
 ```
-perkpilot/
+perk-pilot/
 ├─ prisma/                 schema.prisma (Postgres), seed.ts
 ├─ public/                 sw.js (service worker), icons
 ├─ docs/                   ARCHITECTURE, PROVIDERS, DEPLOYMENT

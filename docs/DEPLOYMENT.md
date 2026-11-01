@@ -4,7 +4,7 @@ PerkPilot is a standard Next.js 16 app. Its API routes use the Node.js runtime.
 
 ## Vercel (simplest)
 
-1. Import the repository and set **Root Directory** to `perkpilot`.
+1. Import the `teprice92/perk-pilot` repository (the app is at the repository root).
 2. Build command: `npm run build`. This runs `prisma generate && next build`.
 3. Environment variables (all optional; see `.env.example`): `ANTHROPIC_API_KEY`, `PERKPILOT_LLM_MODEL`, `DATABASE_URL`, `PERKPILOT_SYNC_TOKEN`, `PERKPILOT_ADMIN_TOKEN`, `DUFFEL_ACCESS_TOKEN`, `AMADEUS_CLIENT_ID`, `AMADEUS_CLIENT_SECRET`, `AMADEUS_ENV`, `SEATS_AERO_API_KEY`, `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`, `PERKPILOT_LIVE_FLIGHTS`, `PERKPILOT_LIVE_HOTELS`, `PERKPILOT_LIVE_AWARDS`, `PERKPILOT_LIVE_EXPERIENCES`, `RATE_LIMIT_PER_MINUTE`, `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION`.
 4. For a database, use any managed Postgres (Neon, Supabase, RDS, Vercel Postgres). Then run once from your machine:
@@ -17,7 +17,7 @@ PerkPilot is a standard Next.js 16 app. Its API routes use the Node.js runtime.
 ## Self-hosting (Docker or a VM)
 
 ```bash
-cd perkpilot
+git clone https://github.com/teprice92/perk-pilot.git && cd perk-pilot
 npm ci
 npm run build
 NODE_ENV=production npm start   # listens on :3000
