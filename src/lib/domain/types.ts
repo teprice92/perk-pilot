@@ -330,8 +330,17 @@ export interface BenefitOverride {
 
 /* ─────────────────────────── Trip search ─────────────────────────── */
 
+/** One stop of a multi-city trip, in visiting order. */
+export interface TripStop {
+  destinationId: string;
+  nights: number;
+}
+
 export interface TripRequest {
   destinationId: string;
+  /** Multi-city: ordered stops. When set, destinationId is the first stop and
+   *  the stop nights must add up to the trip length. */
+  stops?: TripStop[];
   origin: string;
   departDate: ISODate;
   returnDate: ISODate;
@@ -344,14 +353,27 @@ export interface TripRequest {
   notes?: string;
 }
 
+export type AwardAvailabilityStatus =
+  | "unknown" // no information
+  | "estimated" // modelled from award charts — no inventory seen
+  | "cached" // seen in a cached availability snapshot (route/date/cabin level)
+  | "confirmed"; // real-time inventory for this exact itinerary
+
 export interface AwardOption {
   programId: string;
   pointsPerPerson: number;
   taxesPerPersonCents: number;
   /** Carrier-imposed surcharges or other award-only charges. */
   awardOnlyChargesPerPersonCents: number;
-  availability: "unknown" | "estimated" | "confirmed";
+  availability: AwardAvailabilityStatus;
   verifyUrl?: string;
+  /** Provider that supplied the award data (e.g. "Seats.aero"). */
+  source?: string;
+  /** When the cached availability was last seen. */
+  seenAt?: ISODateTime;
+  seats?: number;
+  /** True when taxes were not supplied by the source and are modelled. */
+  taxesEstimated?: boolean;
 }
 
 export interface FlightOffer {
@@ -359,7 +381,8 @@ export interface FlightOffer {
   provider: string;
   dataKind: DataKind;
   fetchedAt: ISODateTime;
-  direction: "outbound" | "return";
+  /** "leg" = inter-city flight on a multi-city trip. */
+  direction: "outbound" | "return" | "leg";
   origin: string;
   destination: string;
   date: ISODate;
@@ -407,6 +430,8 @@ export interface HotelOffer {
   tags: string[];
   hue: number;
   bookingUrl: string;
+  /** City this hotel belongs to (multi-city trips). */
+  destinationId?: string;
 }
 
 export interface ExperienceOffer {
@@ -439,6 +464,12 @@ export interface ExperienceOffer {
   /** Platform tags — benefits only apply when tags match benefit.eligibleTags. */
   tags: string[];
   bookingUrl: string;
+  /** Price derived from a coarse price level rather than a real quote. */
+  priceEstimated?: boolean;
+  /** Required attribution for third-party content (e.g. Google Maps). */
+  attribution?: string;
+  /** City this experience belongs to (multi-city trips). */
+  destinationId?: string;
 }
 
 export interface Destination {

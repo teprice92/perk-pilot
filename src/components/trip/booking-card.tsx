@@ -3,18 +3,20 @@
 import { ChevronDown, ExternalLink, Hotel, Plane, PlaneLanding, Ticket } from "lucide-react";
 import { useState } from "react";
 import { formatCpp, formatUSD } from "@/lib/calc/money";
-import type { OptimizationResult, PlanComponent, PlannedExperience } from "@/lib/optimizer/types";
+import type { OptimizationResult, PlanComponent, PlannedExperience, SlotInfo } from "@/lib/optimizer/types";
 import type { RulesRepository } from "@/lib/rules/repository";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
 import { ConfidenceBadge, DataKindBadge } from "@/components/app/badges";
 import { Badge } from "@/components/ui/badge";
 import { cabinLabel, cardShort, methodLabel, pointsText } from "./helpers";
 
-export function BookingCard({ slot, component, result, rules }: { slot: "outbound" | "return" | "hotel"; component: PlanComponent; result: OptimizationResult; rules: RulesRepository }) {
+export function BookingCard({ info, component, result, rules }: { info: SlotInfo; component: PlanComponent; result: OptimizationResult; rules: RulesRepository }) {
   const [open, setOpen] = useState(false);
   const o = component.option;
-  const flight = slot !== "hotel" ? (slot === "outbound" ? result.flights.outbound : result.flights.return).find((f) => f.id === o.offerId) : undefined;
-  const hotel = slot === "hotel" ? result.hotels.find((h) => h.id === o.offerId) : undefined;
+  const slot = info.slot;
+  const flight = info.kind === "flight" ? (result.flights[slot] ?? []).find((f) => f.id === o.offerId) : undefined;
+  const hotel = info.kind === "hotel" ? result.hotels.find((h) => h.id === o.offerId) : undefined;
+  const award = flight?.awards.find((a) => a.programId === o.loyaltyProgramId);
   const fetchedAt = flight?.fetchedAt ?? hotel?.fetchedAt;
   const kind = flight?.dataKind ?? hotel?.dataKind ?? "demo";
   const card = o.payWithCardId ?? o.earn?.cardId;
@@ -23,13 +25,15 @@ export function BookingCard({ slot, component, result, rules }: { slot: "outboun
     <article className="overflow-hidden rounded-3xl border border-border bg-elevated shadow-card">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
         <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-muted text-fg-muted [&_svg]:size-5">
-          {slot === "outbound" ? <Plane /> : slot === "return" ? <PlaneLanding /> : <Hotel />}
+          {slot === "return" ? <PlaneLanding /> : info.kind === "flight" ? <Plane /> : <Hotel />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">{slot === "hotel" ? `Hotel · ${result.nights} nights` : `${slot} · ${formatDate(flight!.date, { weekday: "short", month: "short", day: "numeric" })}`}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">{info.kind === "hotel" ? `${info.label} · ${info.nights ?? result.nights} nights` : `${info.label} · ${flight ? formatDate(flight.date, { weekday: "short", month: "short", day: "numeric" }) : ""}`}</span>
             <Badge variant="accent">{methodLabel[o.method]}</Badge>
             <DataKindBadge kind={kind} />
+            {award?.availability === "cached" && <Badge variant="accent" title={award.seenAt ? `Seen ${new Date(award.seenAt).toLocaleString()}` : undefined}>Award space seen · {award.source}</Badge>}
+            {award?.availability === "confirmed" && <Badge variant="success">Award space confirmed</Badge>}
           </div>
           {flight && (
             <>
@@ -110,7 +114,7 @@ export function ExperienceRow({ pe, rules }: { pe: PlannedExperience; rules: Rul
           <p className="font-medium">{e.name}</p>
           {e.premium && <Badge variant="gold">Premium</Badge>}
         </div>
-        <p className="text-xs text-fg-muted">{e.neighborhood} · {formatDuration(e.durationMin)} · ★ {e.rating}</p>
+        <p className="text-xs text-fg-muted">{e.neighborhood} · {formatDuration(e.durationMin)} · ★ {e.rating}{e.attribution ? ` · ${e.attribution}` : ""}</p>
         {pe.cardTip && <p className="mt-1 text-xs text-accent">{pe.cardTip}</p>}
         {pe.payWithCardId && !pe.cardTip && <p className="mt-1 text-xs text-fg-subtle">Pay with {cardShort(rules, pe.payWithCardId)}</p>}
       </div>

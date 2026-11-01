@@ -7,6 +7,9 @@ import type { OwnedCard, Traveler } from "@/lib/domain/types";
 import { useRules } from "@/lib/hooks/use-rules";
 import { useApp } from "@/lib/store/app-store";
 import { householdPoints } from "@/lib/wallet";
+import { householdTips } from "@/lib/strategies/household";
+import { todayISO } from "@/lib/utils";
+import { TipsPanel } from "@/components/trip/insights";
 import { CardArt } from "@/components/app/card-art";
 import { PageHeader } from "@/components/app/shell";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +26,12 @@ export default function WalletPage() {
   const startPersonal = useApp((s) => s.startPersonal);
   const rules = useRules();
   const points = useMemo(() => householdPoints(household, rules), [household, rules]);
+  const usage = useApp((s) => s.usage);
+  const trips = useApp((s) => s.trips);
+  const tips = useMemo(
+    () => householdTips(household, rules, usage, todayISO(), trips.filter((t) => t.saved).map((t) => ({ name: t.name, departDate: t.result.request.departDate, result: t.result, strategy: t.selectedStrategy }))),
+    [household, rules, usage, trips],
+  );
   const [confirm, setConfirm] = useState<"demo" | "fresh" | null>(null);
   const nameOf = (id: string) => household.travelers.find((t) => t.id === id)?.name ?? id;
 
@@ -109,6 +118,8 @@ export default function WalletPage() {
             </div>
           )}
         </section>
+
+        {hydrated && <TipsPanel tips={tips} title="Household points strategy" limit={8} />}
 
         <div className="grid gap-6 lg:grid-cols-2">
           {household.travelers.map((t) => (

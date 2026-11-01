@@ -1,9 +1,16 @@
 import { BadgeCheck, CircleDashed, FlaskConical, ShieldAlert, Signal } from "lucide-react";
 import type { Confidence } from "@/lib/calc/confidence";
 import type { DataKind, VerificationStatus } from "@/lib/domain/types";
+import { STALE_AFTER_DAYS, verificationFreshness } from "@/lib/rules/freshness";
 import { Badge } from "@/components/ui/badge";
 
 export function VerificationBadge({ status, lastVerified }: { status: VerificationStatus; lastVerified?: string | null }) {
+  if (status === "verified" && verificationFreshness(status, lastVerified, new Date().toISOString().slice(0, 10)) === "stale")
+    return (
+      <Badge variant="warning" title={`Last verified ${lastVerified} — more than ${STALE_AFTER_DAYS} days ago`}>
+        <BadgeCheck /> Verified {lastVerified} · re-check
+      </Badge>
+    );
   if (status === "verified")
     return (
       <Badge variant="success" title={lastVerified ? `Verified ${lastVerified}` : "Verified"}>

@@ -1,4 +1,5 @@
 import type { ExperienceOffer, HotelOffer, TravelStyle } from "@/lib/domain/types";
+import { googleHotelsUrl } from "@/lib/links";
 import { AIRPORTS, DESTINATIONS, destinationById, findDestination, detectDestinationInText } from "./catalog";
 
 export { AIRPORTS, DESTINATIONS, destinationById, findDestination, detectDestinationInText };
@@ -376,6 +377,7 @@ export function buildHotels(destinationId: string, seasonFactor: number, fetched
     ];
     return {
       id: `demo-hotel-${destinationId}-${i}`,
+      destinationId,
       provider: "PerkPilot Demo",
       dataKind: "demo" as const,
       fetchedAt,
@@ -399,7 +401,7 @@ export function buildHotels(destinationId: string, seasonFactor: number, fetched
       amenities,
       tags: [...extraTags, ...programs.map((p) => (p === "amex_fhr" ? "fhr" : p === "amex_thc" ? "thc" : "the_edit"))],
       hue,
-      bookingUrl: `https://www.google.com/travel/hotels?q=${encodeURIComponent(destinationId.replace("-", " ") + " hotels")}`,
+      bookingUrl: googleHotelsUrl(name, destinationId.replace("-", " ")),
     };
   });
 }
@@ -409,6 +411,7 @@ export function buildExperiences(destinationId: string): ExperienceOffer[] {
     const [name, category, styles, priceUSD, durationMin, bestTime, neighborhood, lat, lng, rating, premium, tags, description] = e;
     return {
       id: `demo-exp-${destinationId}-${i}`,
+      destinationId,
       provider: "PerkPilot Demo",
       dataKind: "demo" as const,
       name,

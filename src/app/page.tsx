@@ -10,6 +10,7 @@ import { DESTINATIONS } from "@/lib/providers/demo/catalog";
 import { useApp } from "@/lib/store/app-store";
 import { todayISO } from "@/lib/utils";
 import { creditStatuses, householdPoints } from "@/lib/wallet";
+import { householdTips } from "@/lib/strategies/household";
 import { DestinationArt } from "@/components/app/destination-art";
 import { SearchForm, type SearchPrefill } from "@/components/trip/search-form";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,10 @@ export default function HomePage() {
   const credits = useMemo(() => creditStatuses(household, usage, rules, todayISO()), [household, usage, rules]);
   const creditsLeft = credits.filter((c) => c.enrolled).reduce((a, c) => a + c.remainingCents, 0);
   const bank = points.list.filter((p) => p.program?.kind === "bank");
+  const highlights = useMemo(
+    () => householdTips(household, rules, usage, todayISO(), trips.map((t) => ({ name: t.name, departDate: t.result.request.departDate, result: t.result, strategy: t.selectedStrategy }))).filter((t) => t.impact === "high" || t.kind === "bonus").slice(0, 3),
+    [household, rules, usage, trips],
+  );
 
   const pick = (name: string) => {
     setPrefill({ destination: name });
@@ -112,6 +117,20 @@ export default function HomePage() {
           )}
         </div>
       </section>
+
+      {hydrated && highlights.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+          <div className="grid gap-3 md:grid-cols-3">
+            {highlights.map((t) => (
+              <Link key={t.id} href={t.href ?? "/wallet"} className="rounded-3xl border border-[color-mix(in_oklab,var(--gold)_35%,transparent)] bg-gold-soft/40 p-4 transition hover:border-[color:var(--gold)]">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[color:var(--gold)]"><Sparkles className="size-3.5" /> {t.kind === "bonus" ? "Transfer bonus" : "Points strategy"}</p>
+                <p className="mt-1 text-sm font-medium">{t.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-fg-muted">{t.body}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Destinations */}
       <section className="mx-auto max-w-7xl px-4 pt-16 sm:px-6">

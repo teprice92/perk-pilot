@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { BenefitOverride, BenefitUsage, Household, PointsBalance, Traveler } from "@/lib/domain/types";
 import { blankHousehold, demoHousehold, demoUsage } from "@/lib/demo/household";
 import { buildItinerary, moveItem, reoptimizeItinerary, type BookingStatus, type Itinerary } from "@/lib/itinerary";
+import { normalizeResult } from "@/lib/optimizer/compat";
 import type { OptimizationResult, StrategyId } from "@/lib/optimizer/types";
 import { idbStorage } from "./idb-storage";
 
@@ -48,6 +49,7 @@ interface AppState {
   addTrip: (result: OptimizationResult) => string;
   updateTrip: (id: string, patch: Partial<SavedTrip>) => void;
   deleteTrip: (id: string) => void;
+  replaceTripResult: (id: string, result: OptimizationResult, rebuildItinerary: boolean) => void;
   selectStrategy: (id: string, s: StrategyId, rebuildItinerary: boolean) => void;
   moveItineraryItem: (tripId: string, itemId: string, toDate: string) => void;
   setItemStatus: (tripId: string, itemId: string, status: BookingStatus) => void;
@@ -105,10 +107,11 @@ export const useApp = create<AppState>()(
         }),
       setOverride: (o) => set((s) => ({ overrides: [...s.overrides.filter((x) => x.benefitId !== o.benefitId), o] })),
       clearOverride: (benefitId) => set((s) => ({ overrides: s.overrides.filter((x) => x.benefitId !== benefitId) })),
-      addTrip: (result) => {
+      addTrip: (raw) => {
+        const result = normalizeResult(raw);
         const trip: SavedTrip = {
           id: result.id,
-          name: `${result.destination.name} · ${new Date(`${result.request.departDate}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`,
+          name: `${(result.destinations ?? [result.destination]).map((d) => d.name.split(/ & /)[0]).join(" + ")} · ${new Date(`${result.request.departDate}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`,
           createdAt: nowIso(),
           updatedAt: nowIso(),
           saved: false,
@@ -125,6 +128,14 @@ export const useApp = create<AppState>()(
       },
       updateTrip: (id, patch) => set((s) => ({ trips: s.trips.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: nowIso() } : t)) })),
       deleteTrip: (id) => set((s) => ({ trips: s.trips.filter((t) => t.id !== id) })),
+      replaceTripResult: (id, raw, rebuild) =>
+        set((s) => ({
+          trips: s.trips.map((t) => {
+            if (t.id !== id) return t;
+            const result = normalizeResult({ ...raw, id });
+            return { ...t, result, itinerary: rebuild ? buildItinerary(result, t.selectedStrategy) : t.itinerary, itineraryEdited: rebuild ? false : t.itineraryEdited, updatedAt: nowIso() };
+          }),
+        })),
       selectStrategy: (id, strategy, rebuild) =>
         set((s) => ({
           trips: s.trips.map((t) =>
@@ -181,7 +192,12 @@ export const useApp = create<AppState>()(
     }),
     {
       name: "perkpilot-state",
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as { trips?: SavedTrip[] };
+        if (version < 2 && state?.trips) state.trips = state.trips.map((t) => ({ ...t, result: normalizeResult(t.result) }));
+        return state as never;
+      },
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ household: s.household, usage: s.usage, overrides: s.overrides, trips: s.trips, settings: s.settings, lastSyncedAt: s.lastSyncedAt }),
       onRehydrateStorage: () => (state) => state?.setHydrated(),

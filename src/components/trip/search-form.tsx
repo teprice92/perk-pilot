@@ -1,10 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarDays, Loader2, MapPin, Minus, PlaneTakeoff, Plus, Sparkles, Users } from "lucide-react";
+import { CalendarDays, Loader2, MapPin, Minus, PlaneTakeoff, Plus, Route, Sparkles, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
-import type { Cabin, TravelStyle } from "@/lib/domain/types";
+import type { Cabin, TravelStyle, TripStop } from "@/lib/domain/types";
 import { useOnline } from "@/lib/hooks/use-online";
 import { AIRPORTS, DESTINATIONS, findDestination } from "@/lib/providers/demo/catalog";
 import type { OptimizationResult } from "@/lib/optimizer/types";
@@ -56,6 +56,8 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   const [styles, setStyles] = useState<TravelStyle[]>(prefill?.styles ?? household.preferences.styles);
   const [cabin, setCabin] = useState<Cabin>(prefill?.cabin ?? household.preferences.cabin);
   const [showMore, setShowMore] = useState(false);
+  const [multi, setMulti] = useState(false);
+  const [stops, setStops] = useState<TripStop[]>([{ destinationId: "tokyo", nights: 4 }, { destinationId: "kyoto", nights: 3 }]);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +70,19 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   }, [household.homeAirport]);
 
   const match = useMemo(() => findDestination(destination), [destination]);
-  const nights = Math.round((Date.parse(returnDate) - Date.parse(departDate)) / 86_400_000);
+  const multiNights = stops.reduce((a, x) => a + x.nights, 0);
+  const effectiveReturn = multi ? addDaysISO(departDate, multiNights) : returnDate;
+  const nights = Math.round((Date.parse(effectiveReturn) - Date.parse(departDate)) / 86_400_000);
   const usAirports = Object.entries(AIRPORTS).filter(([, a]) => a.country === "US");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!match) {
+    if (multi && new Set(stops.map((x) => x.destinationId)).size !== stops.length) {
+      setError("Each city in a multi-city trip should be different.");
+      return;
+    }
+    if (!multi && !match) {
       setError(destination ? `We don't have demo data for “${destination}” yet. Try one of: ${DESTINATIONS.map((d) => d.name).slice(0, 6).join(", ")}…` : "Where would you like to go?");
       return;
     }
@@ -90,7 +98,9 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          request: { destinationId: match.id, origin, departDate, returnDate, flexibleDays: Number(flex), adults, children, cabin, styles },
+          request: multi
+            ? { destinationId: stops[0]!.destinationId, stops, origin, departDate, returnDate: effectiveReturn, flexibleDays: Number(flex), adults, children, cabin, styles }
+            : { destinationId: match!.id, origin, departDate, returnDate, flexibleDays: Number(flex), adults, children, cabin, styles },
           household,
           usage,
           overrides,
@@ -125,6 +135,25 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   return (
     <form onSubmit={submit} className={cn("relative rounded-[1.75rem] border border-border bg-elevated p-3 shadow-float sm:p-4", compact && "shadow-card")} aria-label="Plan a trip">
       <div className="grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
+        {multi ? (
+          <div className="rounded-2xl px-3 py-2">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle"><Route className="size-3.5" /> Cities in order</p>
+            <ol className="mt-1 space-y-1.5">
+              {stops.map((st, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className="w-4 text-xs text-fg-subtle tabular">{i + 1}</span>
+                  <select aria-label={`City ${i + 1}`} value={st.destinationId} onChange={(e) => setStops(stops.map((x, k) => (k === i ? { ...x, destinationId: e.target.value } : x)))} className="min-w-0 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none">
+                    {DESTINATIONS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  <Stepper value={st.nights} set={(n) => setStops(stops.map((x, k) => (k === i ? { ...x, nights: Math.max(1, n) } : x)))} min={1} label={`nights in city ${i + 1}`} />
+                  <span className="text-xs text-fg-subtle">n</span>
+                  {stops.length > 2 && <button type="button" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove city ${i + 1}`} className="text-fg-subtle hover:text-danger"><X className="size-4" /></button>}
+                </li>
+              ))}
+            </ol>
+            {stops.length < 4 && <button type="button" onClick={() => setStops([...stops, { destinationId: DESTINATIONS.find((d) => !stops.some((x) => x.destinationId === d.id))!.id, nights: 2 }])} className="mt-1.5 text-xs font-medium text-accent hover:underline">+ Add a city</button>}
+          </div>
+        ) : (
         <div className="rounded-2xl px-3 py-2 transition focus-within:bg-muted hover:bg-muted">
           <label htmlFor="pp-dest" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
             <MapPin className="size-3.5" /> Where to
@@ -146,6 +175,7 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
           </datalist>
           <p className="h-4 text-[11px] text-fg-subtle">{match ? `${match.emoji} ${match.name}, ${match.country} · ${match.airports.join(" / ")}` : destination ? "Not in demo catalogue" : ""}</p>
         </div>
+        )}
         <div className="rounded-2xl px-3 py-2 transition focus-within:bg-muted hover:bg-muted">
           <label htmlFor="pp-depart" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
             <CalendarDays className="size-3.5" /> Depart
@@ -157,7 +187,7 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
           <label htmlFor="pp-return" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
             <CalendarDays className="size-3.5" /> Return
           </label>
-          <input id="pp-return" type="date" value={returnDate} min={addDaysISO(departDate, 1)} onChange={(e) => setReturnDate(e.target.value)} className="mt-0.5 w-full bg-transparent text-base font-medium outline-none" required />
+          <input id="pp-return" type="date" value={effectiveReturn} min={addDaysISO(departDate, 1)} onChange={(e) => setReturnDate(e.target.value)} readOnly={multi} title={multi ? "Set by the nights in each city" : undefined} className="mt-0.5 w-full bg-transparent text-base font-medium outline-none read-only:text-fg-muted" required />
           <p className="h-4 text-[11px] text-fg-subtle">{nights > 0 ? `${nights} night${nights === 1 ? "" : "s"}` : ""}</p>
         </div>
         <Button type="submit" variant="gold" size="lg" className="h-auto min-h-14 rounded-2xl px-6 lg:min-w-48" disabled={loading || !online}>
@@ -183,6 +213,9 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
           </Select>
         </div>
         <Segmented size="sm" value={flex} onChange={setFlex} options={[{ value: "0", label: "Exact" }, { value: "1", label: "±1" }, { value: "2", label: "±2" }, { value: "3", label: "±3 days" }]} />
+        <button type="button" onClick={() => setMulti((v) => !v)} aria-pressed={multi} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition", multi ? "border-accent bg-accent-soft text-accent" : "border-border text-fg-muted hover:border-border-strong")}>
+          <Route className="size-3.5" /> Multi-city
+        </button>
         <button type="button" onClick={() => setShowMore((v) => !v)} className="text-xs font-medium text-accent hover:underline" aria-expanded={showMore}>
           {showMore ? "Fewer options" : "Style & cabin"}
         </button>

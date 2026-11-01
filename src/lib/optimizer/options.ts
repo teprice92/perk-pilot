@@ -1,4 +1,4 @@
-import type { Benefit, FlightOffer, HotelOffer, Household, VerificationStatus } from "@/lib/domain/types";
+import type { AwardAvailabilityStatus, Benefit, FlightOffer, HotelOffer, Household, VerificationStatus } from "@/lib/domain/types";
 import { centsPerPoint } from "@/lib/calc/cpp";
 import { scoreConfidence } from "@/lib/calc/confidence";
 import { bestCardForSpend } from "@/lib/calc/earn";
@@ -51,14 +51,14 @@ function flightQuality(o: FlightOffer, ctx: OptionContext): number {
   );
 }
 
-export function flightOptions(offer: FlightOffer, ctx: OptionContext): PaymentOption[] {
+export function flightOptions(offer: FlightOffer, ctx: OptionContext, slotId?: string): PaymentOption[] {
   const { rules, household, party } = ctx;
-  const slot = offer.direction;
+  const slot = slotId ?? offer.direction;
   const retail = offer.cashPerPersonCents * party;
   const quality = flightQuality(offer, ctx);
   const opts: PaymentOption[] = [];
   const balances = householdBalances(household, rules);
-  const conf = (ids: string[], availability?: "unknown" | "estimated" | "confirmed") =>
+  const conf = (ids: string[], availability?: AwardAvailabilityStatus) =>
     scoreConfidence({ dataKind: offer.dataKind, ruleStatuses: statusOf(rules, ids), availability });
   const flex = offer.refundable ? "refundable" : "nonrefundable";
   const route = `${offer.origin}→${offer.destination}`;
@@ -147,8 +147,15 @@ export function flightOptions(offer: FlightOffer, ctx: OptionContext): PaymentOp
       draw,
       `Book on ${program.name} for all ${party} traveler(s); pay ${((taxes + extra) / 100).toFixed(2)} USD taxes/fees with ${cashEarn ? rules.card(cashEarn.cardId)?.name : "your card"}.`,
     ];
+    const availabilityNote =
+      award.availability === "cached"
+        ? `${award.source ?? "A cached search"} saw ${award.seats ? `${award.seats} seat(s)` : "award space"} on this route/date in this cabin${award.seenAt ? ` (${new Date(award.seenAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })})` : ""} — not necessarily this exact flight. Re-check before transferring.`
+        : award.availability === "confirmed"
+          ? "Award seats confirmed by a real-time source — book soon, inventory changes."
+          : "Award availability is estimated — confirm seats before transferring points.";
     const warnings = [
-      "Award availability is estimated — confirm seats before transferring points.",
+      availabilityNote,
+      ...(award.taxesEstimated ? ["Award taxes are modelled — the source did not supply them."] : []),
       ...(extra > 0 ? [`Includes about ${(extra / 100).toFixed(0)} USD of carrier-imposed surcharges.`] : []),
     ];
     // Direct balance (with optional top-up later)
@@ -269,19 +276,19 @@ function programPerks(benefit: Benefit | undefined, h: HotelOffer, ctx: OptionCo
   });
 }
 
-export function hotelOptions(h: HotelOffer, ctx: OptionContext): PaymentOption[] {
+export function hotelOptions(h: HotelOffer, ctx: OptionContext, slotId = "hotel"): PaymentOption[] {
   const { rules, household, nights, rooms } = ctx;
   const { total: retail, resort } = hotelCashTotal(h, nights, rooms);
   const quality = hotelQuality(h, ctx);
   const balances = householdBalances(household, rules);
   const flex = h.refundable ? "refundable" : "nonrefundable";
   const opts: PaymentOption[] = [];
-  const conf = (ids: string[], availability?: "unknown" | "estimated" | "confirmed") =>
+  const conf = (ids: string[], availability?: AwardAvailabilityStatus) =>
     scoreConfidence({ dataKind: h.dataKind, ruleStatuses: statusOf(rules, ids), availability });
   const stay = `${nights} night${nights === 1 ? "" : "s"} × ${rooms} room${rooms === 1 ? "" : "s"}`;
 
   const base = {
-    slot: "hotel" as const,
+    slot: slotId,
     offerId: h.id,
     retailCents: retail,
     awardTaxesCents: 0,

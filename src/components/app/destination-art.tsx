@@ -1,11 +1,12 @@
 import type { Destination } from "@/lib/domain/types";
+import type { ImageResult } from "@/lib/providers/types";
 import { cn } from "@/lib/utils";
 
 /**
  * Generative "postcard" art for a destination, built from its palette. Used
  * when no licensed photograph is configured (see UNSPLASH_ACCESS_KEY).
  */
-export function DestinationArt({ destination, className, children, variant = "hills" }: { destination: Pick<Destination, "palette" | "id">; className?: string; children?: React.ReactNode; variant?: "hills" | "waves" }) {
+export function DestinationArt({ destination, className, children, variant = "hills", photo }: { destination: Pick<Destination, "palette" | "id">; className?: string; children?: React.ReactNode; variant?: "hills" | "waves"; photo?: ImageResult | null }) {
   const [a, b, c] = destination.palette;
   const id = `g-${destination.id}`;
   const wavey = variant === "waves" || ["maui", "cancun", "bali", "lisbon"].includes(destination.id);
@@ -40,7 +41,16 @@ export function DestinationArt({ destination, className, children, variant = "hi
           </>
         )}
       </svg>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
+      {photo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photo.url} alt={photo.alt} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+      )}
+      <div className={cn("absolute inset-0 bg-gradient-to-t to-transparent", photo ? "from-black/65 via-black/15" : "from-black/45 via-black/5")} />
+      {photo && (
+        <p className="absolute bottom-1.5 right-3 z-10 text-[10px] text-white/75">
+          Photo by <a href={photo.photographerUrl} target="_blank" rel="noopener noreferrer" className="underline">{photo.photographer}</a> on <a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">Unsplash</a>
+        </p>
+      )}
       <div className="relative h-full">{children}</div>
     </div>
   );

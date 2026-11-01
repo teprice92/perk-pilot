@@ -25,6 +25,7 @@ export interface ToolContext {
 
 const OptimizeInput = z.object({
   destinationId: z.string(),
+  stops: z.array(z.object({ destinationId: z.string(), nights: z.number().int().min(1).max(21) })).min(2).max(4).optional(),
   departDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   returnDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   adults: z.number().int().min(1).max(8).default(2),
@@ -72,11 +73,16 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "optimize_trip",
-    description: "Run PerkPilot's deterministic optimizer for a trip. Returns three strategies (Maximum Savings, Balanced Value, Maximum Luxury) with cash, points by program, chosen flights/hotel, cents-per-point, credits, transfers needed and confidence. Prices are demo estimates unless stated otherwise.",
+    description: "Run PerkPilot's deterministic optimizer for a trip (single or multi-city). Returns three strategies (Maximum Savings, Balanced Value, Maximum Luxury) with cash, points by program, chosen flights/hotel, cents-per-point, credits, transfers needed and confidence. Prices are demo estimates unless stated otherwise.",
     input_schema: {
       type: "object" as const,
       properties: {
-        destinationId: { type: "string" },
+        destinationId: { type: "string", description: "First (or only) destination id" },
+        stops: {
+          type: "array",
+          description: "Multi-city only: ordered stops with nights each; nights must add up to the trip length.",
+          items: { type: "object", properties: { destinationId: { type: "string" }, nights: { type: "integer", minimum: 1 } }, required: ["destinationId", "nights"], additionalProperties: false },
+        },
         departDate: { type: "string", description: "YYYY-MM-DD" },
         returnDate: { type: "string", description: "YYYY-MM-DD" },
         adults: { type: "integer", minimum: 1, maximum: 8 },
@@ -112,11 +118,12 @@ export const TOOL_DEFINITIONS = [
 export function summarizeResult(r: OptimizationResult, rules: RulesRepository) {
   return {
     tripId: r.id,
-    destination: r.destination.name,
+    destination: (r.destinations ?? [r.destination]).map((d) => d.name).join(" → "),
     dates: `${r.request.departDate} → ${r.request.returnDate} (${r.nights} nights)`,
     travelers: r.party,
     dataKind: "demo estimates — not live prices; award availability unconfirmed",
     recommended: r.recommended,
+    dateAlternatives: (r.dateAlternatives ?? []).map((a) => ({ shiftDays: a.shiftDays, dates: `${a.departDate} → ${a.returnDate}`, balancedCash: formatUSD(a.plans.balanced.cashCents), savingsCash: formatUSD(a.plans.savings.cashCents) })),
     plans: Object.fromEntries(
       Object.entries(r.plans).map(([k, p]) => [
         k,
@@ -127,9 +134,12 @@ export function summarizeResult(r: OptimizationResult, rules: RulesRepository) {
           estimatedSavings: formatUSD(p.totals.estimatedSavingsCents),
           creditsApplied: formatUSD(p.totals.creditsCents),
           points: Object.entries(p.totals.pointsByProgram).map(([prog, pts]) => `${formatPoints(pts)} ${rules.programName(prog)}`),
-          outbound: `${p.components.outbound.option.cabin} · ${p.components.outbound.option.label} · cash ${formatUSD(p.components.outbound.cashAfterCreditsCents)}${p.components.outbound.option.cpp ? ` · ${p.components.outbound.option.cpp.toFixed(2)}¢/pt` : ""}`,
-          return: `${p.components.return.option.cabin} · ${p.components.return.option.label} · cash ${formatUSD(p.components.return.cashAfterCreditsCents)}${p.components.return.option.cpp ? ` · ${p.components.return.option.cpp.toFixed(2)}¢/pt` : ""}`,
-          hotel: `${r.hotels.find((h) => h.id === p.components.hotel.option.offerId)?.name} · ${p.components.hotel.option.label} · cash ${formatUSD(p.components.hotel.cashAfterCreditsCents)}`,
+          bookings: (r.slots ?? []).map((info) => {
+            const c = p.components[info.slot]!;
+            if (info.kind === "hotel") return `${info.label}: ${r.hotels.find((h) => h.id === c.option.offerId)?.name} · ${c.option.label} · cash ${formatUSD(c.cashAfterCreditsCents)}`;
+            return `${info.label}: ${c.option.cabin} · ${c.option.label} · cash ${formatUSD(c.cashAfterCreditsCents)}${c.option.cpp ? ` · ${c.option.cpp.toFixed(2)}¢/pt` : ""}`;
+          }),
+          cabinUpgrades: p.upgrades.map((u) => `${u.verdict}: ${u.note}`),
           transfers: p.transfers.map((t) => `${formatPoints(t.sourcePoints)} ${rules.programName(t.fromProgram)} → ${rules.programName(t.toProgram)}${t.bonusPercent ? ` (+${t.bonusPercent}% bonus)` : ""}`),
           householdSteps: p.householdSteps,
           rationale: p.rationale,
@@ -189,8 +199,15 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
       const input = OptimizeInput.parse(rawInput);
       if (!destinationById(input.destinationId)) return { error: `Unknown destinationId "${input.destinationId}". Call list_destinations.` };
       if (input.returnDate <= input.departDate) return { error: "returnDate must be after departDate" };
+      const tripNights = Math.round((Date.parse(input.returnDate) - Date.parse(input.departDate)) / 86_400_000);
+      if (input.stops) {
+        const bad = input.stops.find((s) => !destinationById(s.destinationId));
+        if (bad) return { error: `Unknown destinationId "${bad.destinationId}" in stops.` };
+        if (input.stops.reduce((a, s) => a + s.nights, 0) !== tripNights) return { error: `Stop nights must add up to ${tripNights}.` };
+      }
       const request: TripRequest = {
-        destinationId: input.destinationId,
+        destinationId: input.stops?.[0]?.destinationId ?? input.destinationId,
+        stops: input.stops,
         origin: input.origin ?? household.homeAirport,
         departDate: input.departDate,
         returnDate: input.returnDate,

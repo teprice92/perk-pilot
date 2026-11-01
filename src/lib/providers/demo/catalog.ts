@@ -89,3 +89,15 @@ export function detectDestinationInText(text: string): Destination | undefined {
   }
   return undefined;
 }
+
+/** All catalogue destinations mentioned in text, in the order they appear. */
+export function detectAllDestinationsInText(text: string): Destination[] {
+  const t = ` ${text.toLowerCase()} `;
+  const hits: Array<{ d: Destination; at: number }> = [];
+  for (const d of DESTINATIONS) {
+    const keys = [d.name.toLowerCase(), ...d.aliases.filter((a) => a.length > 3 && !["japan", "italy", "france", "mexico", "hawaii", "portugal", "uk", "england", "indonesia", "iceland"].includes(a))];
+    const at = Math.min(...keys.map((k) => { const m = t.match(new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`)); return m?.index ?? Infinity; }));
+    if (Number.isFinite(at)) hits.push({ d, at });
+  }
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.d);
+}

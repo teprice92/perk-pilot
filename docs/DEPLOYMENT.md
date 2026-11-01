@@ -6,7 +6,7 @@ PerkPilot is a standard Next.js 16 app. Its API routes use the Node.js runtime.
 
 1. Import the repository and set **Root Directory** to `perkpilot`.
 2. Build command: `npm run build`. This runs `prisma generate && next build`.
-3. Environment variables (all optional): `ANTHROPIC_API_KEY`, `PERKPILOT_LLM_MODEL`, `DATABASE_URL`, `PERKPILOT_SYNC_TOKEN`, `DUFFEL_ACCESS_TOKEN`, `PERKPILOT_LIVE_FLIGHTS`, `RATE_LIMIT_PER_MINUTE`, `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION`.
+3. Environment variables (all optional; see `.env.example`): `ANTHROPIC_API_KEY`, `PERKPILOT_LLM_MODEL`, `DATABASE_URL`, `PERKPILOT_SYNC_TOKEN`, `PERKPILOT_ADMIN_TOKEN`, `DUFFEL_ACCESS_TOKEN`, `AMADEUS_CLIENT_ID`, `AMADEUS_CLIENT_SECRET`, `AMADEUS_ENV`, `SEATS_AERO_API_KEY`, `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`, `PERKPILOT_LIVE_FLIGHTS`, `PERKPILOT_LIVE_HOTELS`, `PERKPILOT_LIVE_AWARDS`, `PERKPILOT_LIVE_EXPERIENCES`, `RATE_LIMIT_PER_MINUTE`, `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION`.
 4. For a database, use any managed Postgres (Neon, Supabase, RDS, Vercel Postgres). Then run once from your machine:
    ```bash
    DATABASE_URL=... npx prisma db push
@@ -32,7 +32,7 @@ Put it behind HTTPS (Caddy, nginx or a load balancer). Service workers and PWA i
 - [ ] HTTPS enabled; `PERKPILOT_SYNC_TOKEN` is at least 32 random characters if sync is used
 - [ ] `RATE_LIMIT_PER_MINUTE` tuned. The in-memory limiter is per instance; for several instances, swap `src/lib/server/rate-limit.ts` for a Redis or Upstash implementation.
 - [ ] Rules database seeded, and each rule verified against its source URL, with `verification` and `lastVerified` updated
-- [ ] Live providers enabled only after working through the checklist in [PROVIDERS.md](PROVIDERS.md)
+- [ ] Live providers enabled only after working through the checklist in [PROVIDERS.md](PROVIDERS.md); `PERKPILOT_ADMIN_TOKEN` is at least 32 random characters and rules have been verified through `/api/admin/verify`
 - [ ] Map tiles point to a provider whose usage policy fits your traffic
 - [ ] Error monitoring (for example Sentry) wired into `src/app/error.tsx` and the API routes
 - [ ] If you change `public/sw.js`, bump its `VERSION` so clients pick up the new cache

@@ -4,7 +4,7 @@ import { Check, ExternalLink, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatCpp, formatUSD } from "@/lib/calc/money";
 import type { Cabin, ExperienceOffer } from "@/lib/domain/types";
-import { experienceItem } from "@/lib/itinerary";
+import { experienceItem, insertItem } from "@/lib/itinerary";
 import type { OptimizationResult, PaymentOption, Plan } from "@/lib/optimizer/types";
 import type { RulesRepository } from "@/lib/rules/repository";
 import type { SavedTrip } from "@/lib/store/app-store";
@@ -60,12 +60,13 @@ function OptionTable({ options, plan, rules }: { options: PaymentOption[]; plan:
 }
 
 export function FlightsTab({ result, plan, rules }: { result: OptimizationResult; plan: Plan; rules: RulesRepository }) {
-  const [dir, setDir] = useState<"outbound" | "return">("outbound");
+  const flightSlots = result.slots.filter((s) => s.kind === "flight");
+  const [dir, setDir] = useState<string>(flightSlots[0]?.slot ?? "outbound");
   const [cabin, setCabin] = useState<Cabin | "all">("all");
   const [limit, setLimit] = useState(8);
-  const offers = dir === "outbound" ? result.flights.outbound : result.flights.return;
-  const opts = result.options[dir];
-  const chosenOffer = plan.components[dir].option.offerId;
+  const offers = result.flights[dir] ?? [];
+  const opts = result.options[dir] ?? [];
+  const chosenOffer = plan.components[dir]?.option.offerId;
   const list = useMemo(() => {
     const filtered = offers.filter((f) => cabin === "all" || f.cabin === cabin);
     const best = (id: string) => Math.min(...opts.filter((o) => o.offerId === id).map((o) => o.cashCents));
@@ -75,9 +76,9 @@ export function FlightsTab({ result, plan, rules }: { result: OptimizationResult
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented value={dir} onChange={(v) => { setDir(v); setLimit(8); }} options={[{ value: "outbound", label: "Outbound" }, { value: "return", label: "Return" }]} />
+        <Segmented value={dir} onChange={(v) => { setDir(v); setLimit(8); setCabin("all"); }} options={flightSlots.map((s) => ({ value: s.slot, label: flightSlots.length > 2 ? s.label.replace("Outbound to ", "To ").replace("Return from ", "Home from ") : s.slot === "outbound" ? "Outbound" : "Return" }))} />
         <Segmented size="sm" value={cabin} onChange={setCabin} options={[{ value: "all", label: "All cabins" }, ...cabins.map((c) => ({ value: c, label: cabinLabel(c) }))]} />
-        <span className="text-xs text-fg-subtle">{list.length} itineraries · airports {[...new Set(offers.map((o) => (dir === "outbound" ? o.destination : o.origin)))].join(", ")}</span>
+        <span className="text-xs text-fg-subtle">{list.length} itineraries · {[...new Set(offers.map((o) => `${o.origin}→${o.destination}`))].join(", ")}</span>
       </div>
       {list.slice(0, limit).map((f) => (
         <article key={f.id} className={cn("rounded-3xl border bg-elevated p-5 shadow-card", f.id === chosenOffer ? "border-accent" : "border-border")}>
@@ -88,6 +89,7 @@ export function FlightsTab({ result, plan, rules }: { result: OptimizationResult
                 {f.id === chosenOffer && <Badge variant="accent">In your plan</Badge>}
                 <DataKindBadge kind={f.dataKind} />
                 {f.refundable && <Badge variant="outline">Refundable fare</Badge>}
+                {f.awards.some((a) => a.availability === "cached") && <Badge variant="accent">Award space seen ({f.awards.find((a) => a.availability === "cached")?.source})</Badge>}
               </div>
               <p className="text-sm text-fg-muted tabular">
                 {formatDate(f.date, { weekday: "short", month: "short", day: "numeric" })} · {f.origin} {f.departTime} → {f.destination} {f.arriveTime}{f.arrivesNextDay ? " (+1)" : ""} · {formatDuration(f.durationMin)} · {f.stops ? `via ${f.via}` : "nonstop"}
@@ -102,17 +104,24 @@ export function FlightsTab({ result, plan, rules }: { result: OptimizationResult
         </article>
       ))}
       {list.length > limit && <Button variant="outline" onClick={() => setLimit((l) => l + 8)} className="w-full">Show more flights</Button>}
-      <p className="text-xs text-fg-subtle">Award prices are estimates; availability is never confirmed without a live inventory source. Prices shown per direction are the per-person share of a round-trip fare.</p>
+      <p className="text-xs text-fg-subtle">Award prices are estimates unless marked as seen in a cached search; availability is never confirmed without a real-time inventory source. Round-trip prices are shown as the per-person share for each direction; multi-city legs are one-way fares.</p>
     </div>
   );
 }
 
 export function HotelsTab({ result, plan, rules }: { result: OptimizationResult; plan: Plan; rules: RulesRepository }) {
-  const chosen = plan.components.hotel.option.offerId;
-  const hotels = [...result.hotels].sort((a, b) => (a.id === chosen ? -1 : b.id === chosen ? 1 : b.stars - a.stars || b.nightlyCashCents - a.nightlyCashCents));
+  const stays = result.slots.filter((s) => s.kind === "hotel");
+  const [stay, setStay] = useState(stays[0]?.slot ?? "hotel");
+  const info = stays.find((s) => s.slot === stay) ?? stays[0]!;
+  const chosen = plan.components[stay]?.option.offerId;
+  const nights = info?.nights ?? result.nights;
+  const hotels = result.hotels
+    .filter((h) => stays.length === 1 || h.destinationId === info.destinationId)
+    .sort((a, b) => (a.id === chosen ? -1 : b.id === chosen ? 1 : b.stars - a.stars || b.nightlyCashCents - a.nightlyCashCents));
   const programLabel = { amex_fhr: "Amex FHR", amex_thc: "Amex THC", chase_edit: "Chase The Edit" } as const;
   return (
     <div className="space-y-4">
+      {stays.length > 1 && <Segmented value={stay} onChange={setStay} options={stays.map((s) => ({ value: s.slot, label: `${s.label.replace("Hotel in ", "")} · ${s.nights}n` }))} />}
       {hotels.map((h) => (
         <article key={h.id} className={cn("overflow-hidden rounded-3xl border bg-elevated shadow-card", h.id === chosen ? "border-accent" : "border-border")}>
           <div className="grid md:grid-cols-[220px_1fr]">
@@ -139,10 +148,11 @@ export function HotelsTab({ result, plan, rules }: { result: OptimizationResult;
                   {h.award && <p className="text-xs text-fg-muted tabular">{h.award.pointsPerNight.toLocaleString()} {rules.programName(h.award.programId)} /night (est.)</p>}
                 </div>
               </div>
-              <OptionTable options={result.options.hotel.filter((o) => o.offerId === h.id)} plan={plan} rules={rules} />
-              {h.award && !result.options.hotel.some((o) => o.offerId === h.id && o.loyaltyProgramId === h.award!.programId) && (
+              <OptionTable options={(result.options[stay] ?? []).filter((o) => o.offerId === h.id)} plan={plan} rules={rules} />
+              {h.programs.length === 0 && h.dataKind === "live" && <p className="mt-2 text-xs text-fg-subtle">Card hotel program eligibility (FHR, THC, The Edit) isn&apos;t known for live rates — check Amex Travel and Chase Travel.</p>}
+              {h.award && !(result.options[stay] ?? []).some((o) => o.offerId === h.id && o.loyaltyProgramId === h.award!.programId) && (
                 <p className="mt-2 text-xs text-fg-subtle">
-                  Award stay needs about {(h.award.pointsPerNight * result.nights * result.rooms).toLocaleString()} {rules.programName(h.award.programId)} points — more than your household can access in that program or through eligible transfers.
+                  Award stay needs about {(h.award.pointsPerNight * nights * result.rooms).toLocaleString()} {rules.programName(h.award.programId)} points — more than your household can access in that program or through eligible transfers.
                 </p>
               )}
             </div>
@@ -171,29 +181,25 @@ export function ExperiencesTab({ trip, rules }: { trip: SavedTrip; rules: RulesR
   const setItinerary = useApp((s) => s.setItinerary);
   const household = useApp((s) => s.household);
   const [cat, setCat] = useState<(typeof CATS)[number]["id"]>("all");
+  const [city, setCity] = useState<string>("all");
   const [dayFor, setDayFor] = useState<Record<string, string>>({});
   const { result, itinerary } = trip;
   const inItin = new Set(itinerary.days.flatMap((d) => d.items.map((i) => i.refId)));
   const owned = new Set(household.travelers.flatMap((t) => t.cards.map((c) => c.cardId)));
-  const list = result.experiences.filter((e) => cat === "all" || e.category === cat);
+  const cities = result.destinations ?? [result.destination];
+  const list = result.experiences.filter((e) => (cat === "all" || e.category === cat) && (city === "all" || e.destinationId === city));
   const cardAngle = (e: ExperienceOffer) => {
     const matches = rules.benefits().filter((b) => b.amountCents && b.eligibleTags?.some((t) => e.tags.includes(t)) && owned.has(b.cardId));
     return matches.map((b) => `${b.name} (${cardShort(rules, b.cardId)})${b.enrollmentRequired ? " — enrollment required" : ""}`);
   };
   const add = (e: ExperienceOffer) => {
     const date = dayFor[e.id] ?? itinerary.days[Math.min(1, itinerary.days.length - 1)]!.date;
-    const days = itinerary.days.map((d) => {
-      if (d.date !== date) return d;
-      const tail = d.items.findIndex((i) => i.id === "checkout");
-      const items = [...d.items];
-      items.splice(tail >= 0 ? tail : items.length, 0, experienceItem(e, e.pricePerPersonCents * result.party, null));
-      return { ...d, items };
-    });
-    setItinerary(trip.id, { ...itinerary, days });
+    setItinerary(trip.id, insertItem(itinerary, date, experienceItem(e, e.pricePerPersonCents * result.party, null)));
     toast("Added to itinerary", `${e.name} on ${formatDate(date, { weekday: "short", month: "short", day: "numeric" })}`);
   };
   return (
     <div className="space-y-4">
+      {cities.length > 1 && <Segmented value={city} onChange={setCity} options={[{ value: "all", label: "All cities" }, ...cities.map((d) => ({ value: d.id, label: d.name }))]} />}
       <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4">
         {CATS.filter((c) => c.id === "all" || result.experiences.some((e) => e.category === c.id)).map((c) => (
           <button key={c.id} onClick={() => setCat(c.id)} className={cn("shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition", cat === c.id ? "border-fg bg-fg text-bg" : "border-border text-fg-muted hover:border-border-strong")}>{c.label}</button>
@@ -210,9 +216,10 @@ export function ExperiencesTab({ trip, rules }: { trip: SavedTrip; rules: RulesR
                     <Badge>{e.category.replace("_", " ")}</Badge>
                     {e.premium && <Badge variant="gold">Premium</Badge>}
                     {inItin.has(e.id) && <Badge variant="accent">In itinerary</Badge>}
+                    {e.priceEstimated && <Badge variant="outline">Price estimated</Badge>}
                   </div>
                   <h4 className="mt-2 font-semibold">{e.name}</h4>
-                  <p className="text-xs text-fg-subtle">{e.neighborhood} · {formatDuration(e.durationMin)} · best {e.bestTime} · ★ {e.rating}</p>
+                  <p className="text-xs text-fg-subtle">{e.neighborhood} · {formatDuration(e.durationMin)} · best {e.bestTime} · ★ {e.rating}{e.attribution ? ` · Data: ${e.attribution}` : ""}</p>
                 </div>
                 <p className="font-display shrink-0 text-xl tabular">{e.pricePerPersonCents ? formatUSD(e.pricePerPersonCents) : "Free"}<span className="block text-right text-[11px] font-sans text-fg-subtle">{e.pricePerPersonCents ? "per person" : ""}</span></p>
               </div>

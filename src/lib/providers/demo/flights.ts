@@ -3,7 +3,8 @@ import { PROGRAMS } from "@/lib/rules/seed";
 import { AIRPORTS, CARRIERS, ROUTES } from "./destinations";
 import { haversineKm, kmToMiles } from "./geo";
 import { seeded } from "./random";
-import type { DateInsight, FlightSearchParams, FlightSearchResult } from "../types";
+import { googleFlightsUrl } from "@/lib/links";
+import type { DateInsight, FlightSearchParams, FlightSearchResult, LegSearchParams } from "../types";
 
 /**
  * Demo flight model. Produces plausible — but NOT real — cash fares and award
@@ -197,7 +198,7 @@ export function generateFlights(params: FlightSearchParams & { destinationId: st
             cashPerPersonCents: Math.round(cash / 100) * 100,
             refundable: cabin === "business" || cabin === "first" ? rnd() > 0.4 : rnd() > 0.85,
             awards: cheapestOnly ? [] : buildAwards(r.carrier, cabin, miles, cash, from, to, rnd),
-            bookingUrl: `https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${from} to ${to} on ${date}`)}`,
+            bookingUrl: googleFlightsUrl(from, to, date, { cabin, adults: params.adults + params.children }),
           });
         }
       }
@@ -225,4 +226,75 @@ export function generateFlights(params: FlightSearchParams & { destinationId: st
   }
 
   return { outbound, return: ret, dateInsights, provider: "PerkPilot Demo", dataKind: "demo", warnings };
+}
+
+/* ───────────── Multi-city legs (demo) ───────────── */
+
+const REGIONAL: Array<{ test: (a: string, b: string) => boolean; carriers: string[] }> = [
+  { test: (a, b) => AIRPORTS[a]?.country === "JP" && AIRPORTS[b]?.country === "JP", carriers: ["NH", "JL"] },
+  { test: (a, b) => AIRPORTS[a]?.country === "US" && AIRPORTS[b]?.country === "US", carriers: ["UA", "DL", "AA", "AS", "WN"] },
+  { test: (a, b) => ["FR", "GB", "IT", "PT", "IS"].includes(AIRPORTS[a]?.country ?? "") && ["FR", "GB", "IT", "PT", "IS"].includes(AIRPORTS[b]?.country ?? ""), carriers: ["BA", "AF", "TP", "FI"] },
+];
+
+/**
+ * One-way inter-city legs between two catalogue destinations. Same honesty
+ * rules as round trips: demo prices, estimated award pricing.
+ */
+export function generateLeg(p: LegSearchParams): FlightOffer[] {
+  const fetchedAt = new Date().toISOString();
+  const offers: FlightOffer[] = [];
+  const fromRoutes = new Set((ROUTES[p.fromDestinationId ?? ""] ?? []).map((r) => r.carrier));
+  const toRoutes = (ROUTES[p.toDestinationId ?? ""] ?? []).map((r) => r.carrier);
+  for (const from of p.from) {
+    for (const to of p.to) {
+      const a = AIRPORTS[from];
+      const z = AIRPORTS[to];
+      if (!a || !z) continue;
+      const miles = Math.round(kmToMiles(haversineKm(a.lat, a.lng, z.lat, z.lng)));
+      const domestic = a.country === "US" && z.country === "US";
+      const regional = REGIONAL.find((r) => r.test(from, to))?.carriers.filter((c) => CARRIERS[c]) ?? [];
+      const shared = toRoutes.filter((c) => fromRoutes.has(c));
+      const carriers = (regional.length ? regional : shared).slice(0, 4);
+      const pool = carriers.length ? carriers.map((c) => ({ c, stops: 0 })) : toRoutes.slice(0, 3).map((c) => ({ c, stops: 1 }));
+      for (const { c, stops: baseStops } of pool) {
+        const rnd = seeded("leg", from, to, p.date, c);
+        const stops = miles > 4500 ? Math.max(1, baseStops) : baseStops;
+        const durationMin = Math.round((miles / 450) * 60 + 45 + (stops ? 150 : 0));
+        const depHour = [7, 9, 11, 14, 17, 19][Math.floor(rnd() * 6)]!;
+        const departTime = `${String(depHour).padStart(2, "0")}:${rnd() > 0.5 ? "10" : "40"}`;
+        const arr = addMinutes(departTime, durationMin + ((TZ[to] ?? 0) - (TZ[from] ?? 0)) * 60);
+        const flightNo = `${c}${100 + Math.floor(rnd() * 800)}`;
+        const cabins = (miles < 1200 ? (["economy", "business"] as Cabin[]) : cabinsFor(c, miles)).filter((x) => p.cabins.includes(x));
+        for (const cabin of cabins) {
+          // One-way regional fares carry less of a round-trip discount.
+          const cash = Math.round(priceCash(Math.max(miles, 300), cabin, 1.05, rnd, c, domestic) * (miles < 1200 ? 1.15 : 1) / 100) * 100;
+          offers.push({
+            id: `demo-leg-${from}-${to}-${p.date}-${c}-${cabin}`,
+            provider: "PerkPilot Demo",
+            dataKind: "demo",
+            fetchedAt,
+            direction: "leg",
+            origin: from,
+            destination: to,
+            date: p.date,
+            departTime,
+            arriveTime: arr.time,
+            arrivesNextDay: arr.dayOffset > 0,
+            durationMin,
+            stops,
+            via: stops ? CARRIERS[c]?.hubs[0] : undefined,
+            carrier: c,
+            carrierName: CARRIERS[c]?.name ?? c,
+            flightNumbers: [flightNo],
+            cabin,
+            cashPerPersonCents: cash,
+            refundable: cabin !== "economy" && rnd() > 0.5,
+            awards: buildAwards(c, cabin, miles, cash, from, to, rnd),
+            bookingUrl: googleFlightsUrl(from, to, p.date, { cabin, adults: p.adults + p.children }),
+          });
+        }
+      }
+    }
+  }
+  return offers;
 }

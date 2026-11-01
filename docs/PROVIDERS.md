@@ -16,7 +16,7 @@ Every offer must set:
 
 - `dataKind`: `"live"` for a real-time quote, `"cached"` for a snapshot (with an honest `fetchedAt`), `"demo"` for anything modelled.
 - `fetchedAt`: an ISO timestamp. Confidence drops as data ages.
-- `AwardOption.availability`: `"confirmed"` **only** when the source is real-time inventory for the exact flight, cabin and party size. Cached award searches are `"estimated"`.
+- `AwardOption.availability`: `"confirmed"` **only** when the source is real-time inventory for the exact flight, cabin and party size. Cached snapshots are `"cached"` (with `seenAt` and `source`); modelled prices are `"estimated"`.
 
 Register the provider in `src/lib/providers/registry.ts`. Selection is opt-in: a provider is used only when its environment variables are present **and** an explicit enable flag is set. Never mix demo estimates into live results. The Duffel adapter deliberately returns `awards: []` rather than borrowing demo award prices.
 
@@ -35,14 +35,34 @@ Register the provider in `src/lib/providers/registry.ts`. Selection is opt-in: a
 
 | Need | Candidate | Notes |
 |---|---|---|
-| Cash airfare | **Duffel** ✅ implemented (`live/duffel.ts`) | Enable with `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel`. Offers expire quickly; results are cached for 10 minutes. Test mode is available. |
-| Cash airfare and hotels | Amadeus Self-Service | Free test tier with limited data; production requires approval. OAuth client credentials (`AMADEUS_CLIENT_ID/SECRET`). |
-| Award availability | Seats.aero Partner API (scaffold in `live/seats-aero.ts`) | Cached snapshots, so map to `availability: "estimated"` with the snapshot age. Commercial use needs a partner agreement. Never present results as confirmed. |
-| Hotel pricing | Expedia Rapid, Hotelbeds, Booking.com Demand API | All require partner agreements and have display rules. Map loyalty program and brand to `chainProgramId`. |
-| Hotel award pricing | No general public API | Keep award rates as user-verified or estimated; link to each program's award search. |
-| Experiences | Viator Partner API, GetYourGuide, Google Places | Places content has caching and attribution limits. Set `tags` (for example `stubhub`, `resy`, `sapphire_tables`) only when the platform is verified, because benefits match on tags. |
+| Cash airfare | **Duffel** ✅ `live/duffel.ts` | `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel`. One-way searches per direction, cabin and airport (so mixed cash/points itineraries work), plus multi-city legs. Offers expire quickly; cached 10 min. |
+| Cash airfare | **Amadeus Flight Offers Search** ✅ `live/amadeus.ts` | `AMADEUS_CLIENT_ID/SECRET` (+ `AMADEUS_ENV=production` after approval) + `PERKPILOT_LIVE_FLIGHTS=amadeus`. OAuth client credentials with a shared in-flight token request. Test-environment data is limited. Confirm the Self-Service program's current availability and terms before relying on it. |
+| Award availability | **Seats.aero Partner API** ✅ `live/seats-aero.ts` | `SEATS_AERO_API_KEY` + `PERKPILOT_LIVE_AWARDS=seats-aero`. Cached route/date/cabin snapshots → `availability: "cached"` with `seenAt`, seats left and source. `attachAwards()` applies a row only to flights whose carrier the program can book (and that the row lists, if it lists carriers), in the same cabin, nonstop if the row is direct-only. Cached data replaces the modelled estimate for that program only. Taxes are used only when the row reports them in USD; otherwise they are flagged `taxesEstimated`. Commercial use needs a partner agreement; validate field names against the current docs. |
+| Hotel pricing | **Amadeus Hotel Search** ✅ `live/amadeus.ts` | `PERKPILOT_LIVE_HOTELS=amadeus`. Hotels near the destination (4–5★) with best rates. Chain codes map to loyalty programs for paid-stay context only. No award rates and no FHR/THC/Edit eligibility, so live hotels get cash and portal options and a "check Amex Travel / Chase Travel" note. Alternatives: Expedia Rapid, Hotelbeds, Booking.com Demand API (partner agreements). |
+| Hotel award pricing | No general public API | Award rates stay modelled or user-verified; link to each program's award search. |
+| Experiences | **Google Places API (New)** ✅ `live/google-places.ts` | `GOOGLE_PLACES_API_KEY` + `PERKPILOT_LIVE_EXPERIENCES=google-places`. Text Search by style. No ticket prices, so costs are estimated from `priceLevel` and labelled. No merchant tags, so no card credit is ever assumed. Show "Google Maps" attribution; don't cache content beyond what the terms allow (results are cached in memory for 6 hours per instance; trips saved on the user's device keep a snapshot, so review this against your agreement). Alternatives for bookable inventory: Viator Partner API, GetYourGuide. |
+| Photography | **Unsplash** ✅ `live/unsplash.ts`, `/api/images` | `UNSPLASH_ACCESS_KEY`. Hotlinked with photographer and Unsplash credit (UTM-tagged links) on the trip hero. |
 | Maps | OpenStreetMap tiles (default), MapTiler, Mapbox | Set `NEXT_PUBLIC_MAP_TILE_URL` / `NEXT_PUBLIC_MAP_ATTRIBUTION`. Respect the tile usage policy; the public OSM servers are not for heavy production traffic. |
-| Photography | Unsplash API | Requires photographer attribution and hotlinking per the API guidelines. Without it, PerkPilot uses generative "postcard" art. |
+
+### Composition
+
+`registry.ts` picks the cash flight source (Duffel → Amadeus → demo, whichever is enabled first) and wraps it with `withAwards()` when Seats.aero is enabled. Hotels and experiences each pick their live provider when enabled, otherwise demo. Every provider failure becomes a per-search warning shown in the UI, never a silent fallback to unlabeled data. Flexible-date re-optimization only runs on demo or cached flight data, to avoid multiplying live API calls.
+
+## Verified benefits data
+
+Card rules live in Postgres (`npm run db:seed` loads the starter set). An administrator verifies each rule against its official source:
+
+```bash
+# What needs checking (unverified, or verified more than 90 days ago)
+curl -H "Authorization: Bearer $PERKPILOT_ADMIN_TOKEN" https://your-app/api/admin/verify
+
+# Record a verification (optionally correcting a credit amount)
+curl -X POST -H "Authorization: Bearer $PERKPILOT_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"ruleType":"benefit","ruleId":"csr-travel-credit","status":"verified","sourceUrl":"https://creditcards.chase.com/...","verifiedBy":"ops@example.com"}' \
+  https://your-app/api/admin/verify
+```
+
+Each call updates the rule's `verification` and `lastVerified`, writes a `RuleVerification` audit row (amount corrections record the previous value), and clears the rules cache. The UI marks verifications older than 90 days as "re-check". Households can still override amounts locally on the Benefits page.
 
 ## Issuer portals and card offers
 

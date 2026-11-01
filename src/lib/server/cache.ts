@@ -12,3 +12,7 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
   }
   return value;
 }
+
+export function invalidate(prefix: string) {
+  for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+}

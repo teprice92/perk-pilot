@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellOff, CalendarClock, CheckCircle2, ExternalLink, History, Pencil, PiggyBank, Plane, Sparkles, Ticket } from "lucide-react";
+import { Bell, BellOff, CalendarClock, CalendarPlus, CheckCircle2, ExternalLink, History, Pencil, PiggyBank, Plane, Sparkles, Ticket } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatUSD } from "@/lib/calc/money";
 import type { Benefit } from "@/lib/domain/types";
@@ -8,6 +8,7 @@ import { useRules } from "@/lib/hooks/use-rules";
 import { useApp } from "@/lib/store/app-store";
 import { cn, formatDate, todayISO } from "@/lib/utils";
 import { creditStatuses, type CreditStatus } from "@/lib/wallet";
+import { creditResetCalendar } from "@/lib/ics";
 import { VerificationBadge } from "@/components/app/badges";
 import { PageHeader } from "@/components/app/shell";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +92,21 @@ export default function BenefitsPage() {
               {rules.cards.filter((c) => owned.has(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const ics = creditResetCalendar(credits.filter((c) => c.enrolled), travelerName, settings.reminderDays);
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+              a.download = "perkpilot-credit-resets.ics";
+              a.click();
+              toast("Calendar file downloaded", "Import it into Apple, Google or Outlook Calendar.");
+            }}
+          >
+            <CalendarPlus /> Add resets to calendar
+          </Button>
           <div className="flex items-center gap-3 rounded-full border border-border bg-elevated px-4 py-2 text-sm">
             {settings.notifications ? <Bell className="size-4 text-accent" /> : <BellOff className="size-4 text-fg-subtle" />}
             <span>Expiry reminders</span>
@@ -98,6 +114,7 @@ export default function BenefitsPage() {
             <Select aria-label="Reminder window" value={String(settings.reminderDays)} onChange={(e) => updateSettings({ reminderDays: Number(e.target.value) })} className="h-7 w-auto rounded-full py-0 text-xs">
               {[7, 14, 30, 45].map((d) => <option key={d} value={d}>{d} days</option>)}
             </Select>
+          </div>
           </div>
         </div>
 

@@ -16,7 +16,49 @@ import type { DateInsight } from "@/lib/providers/types";
 export type StrategyId = "savings" | "luxury" | "balanced";
 export const STRATEGIES: StrategyId[] = ["balanced", "savings", "luxury"];
 
-export type ComponentSlot = "outbound" | "return" | "hotel";
+/**
+ * Slot ids: "outbound", "leg-1"…"leg-n" (multi-city), "return", and
+ * "hotel" / "hotel-2"… for each stay. Single-city trips use exactly
+ * outbound, return and hotel.
+ */
+export type ComponentSlot = string;
+
+export interface SlotInfo {
+  slot: ComponentSlot;
+  kind: "flight" | "hotel";
+  /** Human label, e.g. "Outbound flight", "Tokyo → Kyoto", "Hotel in Kyoto". */
+  label: string;
+  date: string;
+  destinationId: string;
+  /** Flights: departure & arrival catalogue destinations (undefined = home). */
+  fromDestinationId?: string;
+  toDestinationId?: string;
+  /** Hotels: stay window. */
+  checkIn?: string;
+  checkOut?: string;
+  nights?: number;
+}
+
+export interface CabinUpgrade {
+  slot: ComponentSlot;
+  fromCabin: Cabin;
+  toCabin: Cabin;
+  optionLabel: string;
+  extraCashCents: number;
+  extraPoints: Record<string, number>;
+  extraRetailCents: number;
+  /** Value of the upgrade increment per extra point (null when no extra points). */
+  marginalCpp: number | null;
+  verdict: "worth_it" | "consider" | "poor_value";
+  note: string;
+}
+
+export interface DateAlternative {
+  shiftDays: number;
+  departDate: string;
+  returnDate: string;
+  plans: Record<StrategyId, { cashCents: number; effectiveCostCents: number; pointsByProgram: Record<string, number> }>;
+}
 
 export type PaymentMethod = "cash" | "transfer_award" | "direct_award" | "portal_points" | "program_booking";
 
@@ -158,6 +200,8 @@ export interface Plan {
   warnings: string[];
   confidence: Confidence;
   withinBudget: boolean;
+  /** Premium cabin analysis: marginal cost/value of moving each flight up a cabin. */
+  upgrades: CabinUpgrade[];
 }
 
 export interface OptimizationResult {
@@ -165,16 +209,23 @@ export interface OptimizationResult {
   createdAt: string;
   request: TripRequest;
   destination: Destination;
+  /** All destinations visited, in order (one for single-city trips). */
+  destinations: Destination[];
+  /** Ordered booking slots (flights then hotels). */
+  slots: SlotInfo[];
   nights: number;
   party: number;
   rooms: number;
   plans: Record<StrategyId, Plan>;
   recommended: StrategyId;
-  flights: { outbound: FlightOffer[]; return: FlightOffer[] };
+  /** Flight offers keyed by flight slot ("outbound", "leg-1", "return"). */
+  flights: Record<ComponentSlot, FlightOffer[]>;
   hotels: HotelOffer[];
   experiences: ExperienceOffer[];
   options: Record<ComponentSlot, PaymentOption[]>;
   dateInsights: DateInsight[];
+  /** Phase 4: full re-optimization for nearby date shifts (same trip length). */
+  dateAlternatives: DateAlternative[];
   dataNotice: string;
   rulesVersion: string;
   providers: string[];

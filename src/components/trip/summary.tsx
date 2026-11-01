@@ -86,7 +86,7 @@ export function TripSummary({ result, plan, rules, travelerName }: { result: Opt
               <li key={i} className="flex flex-col gap-1 rounded-xl border border-border bg-elevated p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   <span className="font-medium">{i + 1}. {formatPoints(x.sourcePoints)} {rules.programName(x.fromProgram)} → {formatPoints(x.partnerPointsReceived)} {rules.programName(x.toProgram)}</span>
-                  <span className="block text-xs text-fg-subtle">{x.recipientNote} For the {x.forSlot === "hotel" ? "hotel" : `${x.forSlot} flight`}.</span>
+                  <span className="block text-xs text-fg-subtle">{x.recipientNote} For: {result.slots.find((s) => s.slot === x.forSlot)?.label ?? x.forSlot}.</span>
                 </span>
                 <span className="flex shrink-0 flex-wrap gap-1.5">
                   <Badge variant="outline">Ratio {x.ratioText}</Badge>

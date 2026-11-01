@@ -40,12 +40,13 @@
 
 ## Optimization pipeline
 
-1. **Fetch** offers for outbound and return flights (all destination airports, cabins up to the preferred cabin plus one, the stops filter), hotels and experiences.
+0. **Slots.** `optimizer/slots.ts` turns the request into ordered booking slots: `outbound`, `leg-1…n` (multi-city), `return`, and `hotel`, `hotel-2…` for each stay, each with dates, cities and nights. A single-city trip is exactly outbound, return and hotel.
+1. **Fetch** offers per slot: round-trip flights (all destination airports, cabins up to the preferred cabin plus one, the stops filter), one-way inter-city legs, hotels per stay and experiences per city. Awards from a cached source are attached where configured.
 2. **Expand** each offer into `PaymentOption`s:
    - Flights: cash direct · portal points (Chase Travel / Amex Travel at the applicable date-effective rate) · existing airline miles · bank → airline transfer, with increments, bonuses and an optional top-up from an existing balance.
    - Hotels: cash direct · FHR / THC / The Edit program bookings (guaranteed perks valued; credits through the ledger) · hotel points held · bank → hotel transfer (5th-night-free modelled for programs that offer it) · portal points.
 3. **Prune** per strategy: keep the overall top *k*, plus the best three per funding source, so the combination search can trade points between components when balances bind.
-4. **Search** every combination (outbound × return × hotel). For each one:
+4. **Search** every combination when the space is small (at most 30k, which covers single-city trips). Otherwise run a **beam search** that keeps the 160 best feasible partial plans, filling hotels first, then flights. For each candidate:
    - Check **feasibility** with `householdBalances.allocate()`, which honours pooling rules.
    - Apply **credits** through a cloned `CreditLedger`, hotel first so program-specific credits match before generic travel credits.
    - **Score**:
@@ -53,11 +54,20 @@
      - *Balanced*: `cash + pointsValue − perks − 0.6·comfort`.
      - *Luxury*: `−(comfort + perks) + 0.2·(cash + pointsValue)`, with a steep penalty over budget.
 5. **Plan experiences** per strategy (style match, rating and price sensitivity; no premium experiences in Savings, two in Balanced). Apply only credits whose merchant tags match.
-6. **Assemble** the plan: totals, balances before and after, explicit transfer instructions, household combine steps, unlocked benefits (credits, guaranteed and availability-dependent perks, lounges, protections, bonuses), the rationale comparing against the best alternative, warnings and confidence.
+6. **Assemble** the plan: totals, premium-cabin upgrade analysis (marginal cash, points and cents per point of the next cabin on the same flight, judged against the comfort settings), balances before and after, explicit transfer instructions, household combine steps, unlocked benefits (credits, guaranteed and availability-dependent perks, lounges, protections, bonuses), the rationale comparing against the best alternative, warnings and confidence.
+
+## Phase 4 features
+
+- **Flexible dates:** `optimizeTrip()` fully re-optimizes all three strategies for shifts of ±1 and ±N days (same trip length) and returns `dateAlternatives`. The UI can re-run any of them as a new draft.
+- **Multi-city:** 2–4 stops. Inter-city legs use `FlightProvider.searchLeg`. The demo model prefers regional carriers (ANA/JAL within Japan, BA/AF/TP within Europe). Experiences and credits are planned per stay through one shared credit ledger, so nothing is double counted across cities.
+- **Household strategies** (`strategies/household.ts`): pooling advice, ownership and authorized-user transfer notes, top-up versus full transfer, valuations below a portal floor, active-bonus relevance, enrollment gaps and resets, and over-commitment across upcoming trips.
+- **Trip re-optimization:** re-runs a saved trip with today's balances, rules and prices. `optimizer/diff.ts` shows the cash and points deltas and the changed bookings per strategy. Users can apply the changes, keep their edited itinerary, or keep the current plan.
+- **Bonus monitoring and reminders:** active and upcoming transfer bonuses (Benefits → Transfers, home alerts), local notifications for credit resets, and an `.ics` export of reset dates.
+- **Compatibility:** `optimizer/compat.ts` upgrades trips saved by earlier versions, through a persisted-store migration (v2).
 
 ## Itinerary
 
-`src/lib/itinerary` builds the days from the selected plan. Flights and check-in/out are **anchored**. Experiences are distributed across full days by time-of-day preference. Re-optimization orders flexible items by time slot, then nearest neighbour from the hotel, then recomputes start times and travel legs and flags overloaded days. Drag-and-drop (dnd-kit, with pointer, touch and keyboard sensors) and a "Move to day" control both call `moveItem()`.
+`src/lib/itinerary` builds the days from the selected plan. Flights and check-in/out are **anchored**, each marked as an opening or closing anchor for the day. Multi-city itineraries carry `stays[]`, and each day routes from that day's hotel. Arrivals that roll past midnight are handled, and activities start on the first usable day after arrival. Experiences are distributed across full days by time-of-day preference. Re-optimization orders flexible items by time slot, then nearest neighbour from the hotel, then recomputes start times and travel legs and flags overloaded days. Drag-and-drop (dnd-kit, with pointer, touch and keyboard sensors) and a "Move to day" control both call `moveItem()`.
 
 ## Data and persistence
 

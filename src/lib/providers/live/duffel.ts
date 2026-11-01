@@ -1,6 +1,6 @@
 import type { Cabin, FlightOffer } from "@/lib/domain/types";
 import { cached } from "@/lib/server/cache";
-import type { FlightProvider, FlightSearchParams, FlightSearchResult, ProviderInfo } from "../types";
+import type { FlightProvider, FlightSearchParams, FlightSearchResult, LegSearchParams, ProviderInfo } from "../types";
 
 /**
  * Duffel adapter — live CASH fares only (Duffel does not sell award seats).
@@ -57,7 +57,7 @@ export function isoDurationMinutes(d?: string): number {
 
 const hhmm = (iso: string) => iso.slice(11, 16);
 
-export function mapDuffelOffer(o: DuffelOffer, direction: "outbound" | "return", passengers: number, cabin: Cabin, fetchedAt: string): FlightOffer | null {
+export function mapDuffelOffer(o: DuffelOffer, direction: FlightOffer["direction"], passengers: number, cabin: Cabin, fetchedAt: string): FlightOffer | null {
   if (o.total_currency !== "USD") return null; // currency conversion is intentionally not guessed
   const slice = o.slices[0];
   if (!slice?.segments.length) return null;
@@ -136,5 +136,19 @@ export const duffelFlightProvider: FlightProvider = {
     const [outbound, ret] = await Promise.all([run("outbound"), run("return")]);
     warnings.push("Live cash fares from Duffel. Award pricing is not included for live results.");
     return { outbound, return: ret, dateInsights: [], provider: "Duffel", dataKind: "live", warnings };
+  },
+  async searchLeg(p: LegSearchParams) {
+    const fetchedAt = new Date().toISOString();
+    const offers: FlightOffer[] = [];
+    const warnings: string[] = [];
+    for (const from of p.from) for (const to of p.to) for (const cabin of p.cabins) {
+      try {
+        const raw = await cached(`duffel:${from}:${to}:${p.date}:${cabin}:${p.adults}:${p.children}`, 10 * 60_000, () => searchOneWay(from, to, p.date, p.adults, p.children, cabin, 1));
+        offers.push(...raw.map((o) => mapDuffelOffer(o, "leg", p.adults + p.children, cabin, fetchedAt)).filter((x): x is FlightOffer => x !== null).sort((a, b) => a.cashPerPersonCents - b.cashPerPersonCents).slice(0, 6));
+      } catch (e) {
+        warnings.push(`Duffel search ${from}→${to} (${cabin}) failed: ${e instanceof Error ? e.message : "error"}`);
+      }
+    }
+    return { offers, warnings };
   },
 };

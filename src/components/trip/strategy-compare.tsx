@@ -18,9 +18,9 @@ export function StrategyCompare({ result, selected, onSelect, rules }: { result:
       {STRATEGIES.map((s) => {
         const p = result.plans[s];
         const on = s === selected;
-        const flight = p.components.outbound.option;
-        const hotel = p.components.hotel.option;
-        const hotelOffer = result.hotels.find((h) => h.id === hotel.offerId);
+        const flight = p.components.outbound!.option;
+        const hotelNames = result.slots.filter((x) => x.kind === "hotel").map((x) => result.hotels.find((h) => h.id === p.components[x.slot]?.option.offerId)?.name).filter(Boolean);
+        const hotel = p.components.hotel!.option;
         return (
           <motion.button
             key={s}
@@ -60,7 +60,7 @@ export function StrategyCompare({ result, selected, onSelect, rules }: { result:
             </dl>
             <div className="mt-4 space-y-1 border-t border-border pt-3 text-xs text-fg-muted">
               <p className="truncate">✈ {cabinLabel(flight.cabin)} · {flight.label}</p>
-              <p className="truncate">⌂ {hotelOffer?.name} · {hotel.label}</p>
+              <p className="truncate">⌂ {hotelNames.length > 1 ? hotelNames.join(" · ") : `${hotelNames[0]} · ${hotel.label}`}</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <ConfidenceBadge confidence={p.confidence} showScore={false} />
@@ -84,9 +84,15 @@ export function ComparisonTable({ result, rules }: { result: OptimizationResult;
     { label: "Guaranteed perks (est.)", get: (s) => formatUSD(result.plans[s].totals.perksValueCents) },
     { label: "Points at your valuation", get: (s) => formatUSD(result.plans[s].totals.pointsValueAtBaselineCents) },
     { label: "Effective cost†", get: (s) => formatUSD(result.plans[s].totals.effectiveCostCents) },
-    { label: "Outbound", get: (s) => `${cabinLabel(result.plans[s].components.outbound.option.cabin)} · ${result.plans[s].components.outbound.option.label}` },
-    { label: "Return", get: (s) => `${cabinLabel(result.plans[s].components.return.option.cabin)} · ${result.plans[s].components.return.option.label}` },
-    { label: "Hotel", get: (s) => `${result.hotels.find((h) => h.id === result.plans[s].components.hotel.option.offerId)?.name} · ${result.plans[s].components.hotel.option.label}` },
+    ...result.slots.map((info) => ({
+      label: info.label,
+      get: (s: StrategyId) => {
+        const c = result.plans[s].components[info.slot];
+        if (!c) return "—";
+        if (info.kind === "hotel") return `${result.hotels.find((h) => h.id === c.option.offerId)?.name} · ${c.option.label}`;
+        return `${cabinLabel(c.option.cabin)} · ${c.option.label}`;
+      },
+    })),
     { label: "Confidence", get: (s) => `${result.plans[s].confidence.level} (${result.plans[s].confidence.score})` },
   ];
   return (

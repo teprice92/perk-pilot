@@ -1,4 +1,4 @@
-import type { DataKind, VerificationStatus } from "@/lib/domain/types";
+import type { AwardAvailabilityStatus, DataKind, VerificationStatus } from "@/lib/domain/types";
 
 export type ConfidenceLevel = "high" | "medium" | "low";
 
@@ -7,7 +7,7 @@ export interface ConfidenceInput {
   /** Age of the price/availability data in hours. */
   ageHours?: number;
   ruleStatuses: VerificationStatus[];
-  availability?: "unknown" | "estimated" | "confirmed";
+  availability?: AwardAvailabilityStatus;
 }
 
 export interface Confidence {
@@ -43,6 +43,9 @@ export function scoreConfidence(input: ConfidenceInput): Confidence {
   if (input.availability === "unknown") {
     score -= 8;
     reasons.push("Award availability has not been confirmed");
+  } else if (input.availability === "cached") {
+    score -= 3;
+    reasons.push("Award space was seen in a cached search — re-check before transferring");
   } else if (input.availability === "estimated") {
     score -= 5;
     reasons.push("Award pricing is estimated");

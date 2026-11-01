@@ -1,6 +1,6 @@
 import type { Cabin, TravelStyle } from "@/lib/domain/types";
 import { formatPoints, formatUSD } from "@/lib/calc/money";
-import { detectDestinationInText, DESTINATIONS } from "@/lib/providers/demo/catalog";
+import { detectAllDestinationsInText, detectDestinationInText, DESTINATIONS } from "@/lib/providers/demo/catalog";
 import { runTool, summarizeResult, type ToolContext } from "./tools";
 
 /**
@@ -15,6 +15,7 @@ const SEASONS: Record<string, number> = { spring: 3, summer: 6, fall: 9, autumn:
 export function parseIntent(text: string, today: string) {
   const t = text.toLowerCase();
   const dest = detectDestinationInText(t);
+  const all = detectAllDestinationsInText(t);
   const nightsMatch = t.match(/(\d+)\s*(?:night|day)/);
   const weekMatch = t.match(/(\d+|a|one|two)\s*week/);
   let nights = nightsMatch ? Number(nightsMatch[1]) - (t.includes("day") && !t.includes("night") ? 1 : 0) : weekMatch ? (["a", "one"].includes(weekMatch[1]!) ? 7 : weekMatch[1] === "two" ? 14 : Number(weekMatch[1]) * 7) : 7;
@@ -42,7 +43,8 @@ export function parseIntent(text: string, today: string) {
   if (/business class|lie-flat|lie flat|business/.test(t)) cabin = "business";
   else if (/first class/.test(t)) cabin = "first";
   else if (/economy|cheap/.test(t)) cabin = "economy";
-  return { dest, depart, returnDate: ret.toISOString().slice(0, 10), nights, styles, cabin, wantsChaseVsAmex: /chase|amex|which card|should we use/.test(t), wantsHotel: /hotel|resort|stay/.test(t), wantsRemaining: /remaining|left over|leftover|before our trip|best use/.test(t), wantsBenefits: /benefit|credit|perk|lounge/.test(t) };
+  const stops = all.length > 1 ? all.slice(0, 3).map((d, i, arr) => ({ destinationId: d.id, nights: Math.floor(nights / arr.length) + (i < nights % arr.length ? 1 : 0) })) : undefined;
+  return { dest: all[0] ?? dest, stops, depart, returnDate: ret.toISOString().slice(0, 10), nights, styles, cabin, wantsChaseVsAmex: /chase|amex|which card|should we use/.test(t), wantsHotel: /hotel|resort|stay/.test(t), wantsRemaining: /remaining|left over|leftover|before our trip|best use/.test(t), wantsBenefits: /benefit|credit|perk|lounge/.test(t) };
 }
 
 export async function fallbackConcierge(text: string, ctx: ToolContext): Promise<string> {
@@ -64,17 +66,16 @@ export async function fallbackConcierge(text: string, ctx: ToolContext): Promise
 
   const res = (await runTool(
     "optimize_trip",
-    { destinationId: intent.dest.id, departDate: intent.depart, returnDate: intent.returnDate, adults: 2, children: 0, cabin: intent.cabin, styles: intent.styles.length ? intent.styles : undefined, flexibleDays: 1 },
+    { destinationId: intent.dest.id, stops: intent.stops, departDate: intent.depart, returnDate: intent.returnDate, adults: 2, children: 0, cabin: intent.cabin, styles: intent.styles.length ? intent.styles : undefined, flexibleDays: 1 },
     ctx,
   )) as ReturnType<typeof summarizeResult>;
   const r = ctx.results[ctx.results.length - 1]!;
   const b = r.plans.balanced;
   lines.push(`Here's what I found for **${r.destination.name}**, ${res.dates}, for ${r.party} travelers (demo estimates):\n`);
   for (const key of ["balanced", "savings", "luxury"] as const) {
-    const p = res.plans[key] as { title: string; cashOutOfPocket: string; points: string[]; outbound: string; hotel: string };
+    const p = res.plans[key] as { title: string; cashOutOfPocket: string; points: string[]; bookings: string[] };
     lines.push(`**${p.title}** — ${p.cashOutOfPocket} cash${p.points.length ? ` + ${p.points.join(" + ")}` : ""}`);
-    lines.push(`- ✈ ${p.outbound}`);
-    lines.push(`- ⌂ ${p.hotel}`);
+    for (const b of p.bookings) lines.push(`- ${b}`);
   }
   lines.push("\n**Why Balanced Value:**");
   for (const x of b.rationale) lines.push(`- ${x}`);

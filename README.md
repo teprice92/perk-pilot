@@ -12,7 +12,7 @@ PerkPilot is a mobile-first web app that plans trips around a household's credit
 
 | Area | Status |
 |---|---|
-| Trip search (destination, dates, ±3 flexible days, travelers, cabin, style) | ✅ |
+| Trip search (destination or multi-city, dates, ±3 flexible days, travelers, cabin, style) | ✅ |
 | Deterministic rewards engine (cents per point, transfers, bonuses, credits, pooling) | ✅ tested |
 | Three strategies with a side-by-side comparison and a recommended plan | ✅ |
 | Flight, hotel and experience comparison screens | ✅ |
@@ -22,8 +22,18 @@ PerkPilot is a mobile-first web app that plans trips around a household's credit
 | Saved trips, available offline | ✅ |
 | AI concierge (Claude with verified tools, plus a deterministic fallback) | ✅ |
 | Installable PWA with an offline indicator | ✅ |
-| Live cash fares (Duffel adapter, opt-in) | ✅ adapter + tests (needs your token) |
-| Live award availability, hotel pricing and experiences | 🧭 adapter contracts and docs ([docs/PROVIDERS.md](docs/PROVIDERS.md)) |
+| Live cash fares — Duffel or Amadeus (opt-in) | ✅ adapters + mocked tests (need your credentials) |
+| Cached award availability — Seats.aero (opt-in) | ✅ adapter, merged at route/date/cabin level, labelled "seen in cached search" |
+| Live hotel rates — Amadeus (opt-in) | ✅ cash/portal options only; card-program eligibility is never guessed |
+| Live destination experiences — Google Places (opt-in) | ✅ prices labelled "estimated", Google attribution |
+| Destination photography — Unsplash (opt-in) | ✅ with photographer attribution; generative art otherwise |
+| Verified benefits workflow (admin API + audit log + 90-day staleness) | ✅ |
+| Flexible-date optimization (full re-optimization of nearby dates) | ✅ |
+| Multi-city trips (2–4 cities, inter-city legs, per-city hotels and experiences) | ✅ |
+| Premium-cabin upgrade analysis | ✅ |
+| Household points strategies (pooling, ownership, top-ups, valuation floors, commitments) | ✅ |
+| Trip re-optimization with a change diff | ✅ |
+| Transfer-bonus monitoring and alerts; credit-reset calendar export (.ics) | ✅ |
 | Multi-user authentication | 🧭 single-household sync token today ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#authentication)) |
 
 ### Honesty rules built in
@@ -56,7 +66,12 @@ With no environment variables set, the app runs in **guest demo mode**: a sample
 | `ANTHROPIC_API_KEY` (+ `PERKPILOT_LLM_MODEL`, default `claude-opus-5-5`) | The AI concierge. It uses server-side fallback on refusals. |
 | `DATABASE_URL` | Loading the rules database from PostgreSQL, and household sync |
 | `PERKPILOT_SYNC_TOKEN` | Syncing household data between both travelers' devices (self-hosted) |
-| `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel` | Live cash fares |
+| `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel` | Live cash fares (Duffel) |
+| `AMADEUS_CLIENT_ID/SECRET` + `PERKPILOT_LIVE_FLIGHTS=amadeus` and/or `PERKPILOT_LIVE_HOTELS=amadeus` | Live cash fares and/or hotel rates (Amadeus) |
+| `SEATS_AERO_API_KEY` + `PERKPILOT_LIVE_AWARDS=seats-aero` | Cached award availability merged into any flight source |
+| `GOOGLE_PLACES_API_KEY` + `PERKPILOT_LIVE_EXPERIENCES=google-places` | Live destination experiences |
+| `UNSPLASH_ACCESS_KEY` | Destination photography |
+| `PERKPILOT_ADMIN_TOKEN` (+ `DATABASE_URL`) | The rule-verification admin API |
 | `NEXT_PUBLIC_MAP_TILE_URL` | Your own map tile provider (default: OpenStreetMap) |
 | `RATE_LIMIT_PER_MINUTE` | API rate limit per client (default 30) |
 
@@ -102,6 +117,8 @@ perkpilot/
    │  ├─ api/rules         GET rules dataset (DB or seed)
    │  ├─ api/providers     GET integration status
    │  ├─ api/sync          GET/PUT household snapshot (token)
+   │  ├─ api/admin/verify  GET verification queue / POST verify a rule (admin token)
+   │  ├─ api/images        GET licensed destination photo (Unsplash)
    │  └─ api/health
    ├─ components/          ui/ (design system), app/ (shell, art, badges), trip/
    └─ lib/
@@ -110,7 +127,8 @@ perkpilot/
       ├─ calc/             cpp, transfers, credits, periods, earn, confidence, money
       ├─ optimizer/        payment options, pooling/balances, strategy engine
       ├─ providers/        adapter contracts, demo providers, live adapters
-      ├─ itinerary/        generation, drag/move, re-optimization
+      ├─ itinerary/        generation (multi-stay), drag/move, re-optimization
+      ├─ strategies/       household points strategies
       ├─ ai/               tool definitions, Claude orchestrator, deterministic fallback
       ├─ store/            Zustand store persisted to IndexedDB
       └─ server/           db, rules loader, cache, rate limiting

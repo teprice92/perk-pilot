@@ -10,6 +10,7 @@ const style = z.enum(["romantic", "food", "culture", "adventure", "wellness", "n
 export const TripRequestSchema = z
   .object({
     destinationId: z.string().min(1).max(64),
+    stops: z.array(z.object({ destinationId: z.string().min(1).max(64), nights: z.number().int().min(1).max(28) })).min(2).max(4).optional(),
     origin: airport,
     departDate: isoDate,
     returnDate: isoDate,
@@ -22,6 +23,11 @@ export const TripRequestSchema = z
     notes: z.string().max(500).optional(),
   })
   .refine((r) => r.returnDate > r.departDate, { message: "Return date must be after departure", path: ["returnDate"] })
+  .refine((r) => !r.stops || r.stops.reduce((a, s) => a + s.nights, 0) === Math.round((Date.parse(r.returnDate) - Date.parse(r.departDate)) / 86_400_000), {
+    message: "Multi-city stop nights must add up to the trip length",
+    path: ["stops"],
+  })
+  .refine((r) => !r.stops || r.stops[0]!.destinationId === r.destinationId, { message: "destinationId must be the first stop", path: ["destinationId"] })
   .refine((r) => (Date.parse(r.returnDate) - Date.parse(r.departDate)) / 86_400_000 <= 30, {
     message: "Trips longer than 30 nights are not supported yet",
     path: ["returnDate"],
