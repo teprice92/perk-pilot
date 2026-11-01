@@ -1,7 +1,7 @@
 import type { ExperienceProvider, FlightProvider, HotelProvider, ProviderInfo } from "./types";
 import { buildExperiences, buildHotels, destinationById } from "./demo/destinations";
 import { generateFlights } from "./demo/flights";
-import { duffelInfo } from "./live/duffel";
+import { duffelFlightProvider, duffelInfo } from "./live/duffel";
 import { seatsAeroInfo } from "./live/seats-aero";
 
 /* ───────────── Demo providers (always available, clearly labelled) ───────────── */
@@ -121,7 +121,9 @@ export function providerCatalogue(): ProviderInfo[] {
   ];
 }
 
+/** Live providers are opt-in and only used once configured; otherwise demo. */
 export function getFlightProvider(): FlightProvider {
+  if (duffelInfo().configured) return duffelFlightProvider;
   return demoFlightProvider;
 }
 export function getHotelProvider(): HotelProvider {

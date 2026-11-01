@@ -140,6 +140,11 @@ export function HotelsTab({ result, plan, rules }: { result: OptimizationResult;
                 </div>
               </div>
               <OptionTable options={result.options.hotel.filter((o) => o.offerId === h.id)} plan={plan} rules={rules} />
+              {h.award && !result.options.hotel.some((o) => o.offerId === h.id && o.loyaltyProgramId === h.award!.programId) && (
+                <p className="mt-2 text-xs text-fg-subtle">
+                  Award stay needs about {(h.award.pointsPerNight * result.nights * result.rooms).toLocaleString()} {rules.programName(h.award.programId)} points — more than your household can access in that program or through eligible transfers.
+                </p>
+              )}
             </div>
           </div>
         </article>
