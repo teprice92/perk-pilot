@@ -1,0 +1,348 @@
+// PerkPilot database schema (PostgreSQL, Prisma ORM 7)
+//
+// Design notes
+//  - Money is stored as integer cents; points as integers.
+//  - Every rule table is date-effective (effectiveFrom / effectiveTo) and
+//    carries provenance (sourceUrl, lastVerified, verification). Changing a
+//    benefit means inserting a new row, never rewriting history.
+//  - No card numbers, passwords or loyalty credentials are ever stored —
+//    loyalty accounts keep only the last 4 characters of the member number.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum VerificationStatus {
+  verified
+  unverified
+  estimated
+  demo
+}
+
+enum ProgramKind {
+  bank
+  airline
+  hotel
+}
+
+enum CardRole {
+  primary
+  authorized_user
+}
+
+// ───────────────────────────── Accounts ─────────────────────────────
+
+model User {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String?
+  createdAt  DateTime    @default(now())
+  households Household[]
+}
+
+model Household {
+  id               String           @id @default(cuid())
+  name             String
+  mode             String           @default("personal")
+  homeAirport      String           @default("SFO")
+  preferences      Json
+  valuations       Json
+  minRedemptionCpp Decimal          @default(1.5) @db.Decimal(5, 2)
+  cashBudgetCents  Int              @default(0)
+  ownerId          String?
+  owner            User?            @relation(fields: [ownerId], references: [id])
+  travelers        Traveler[]
+  usage            BenefitUsage[]
+  overrides        BenefitOverride[]
+  trips            Trip[]
+  syncSnapshot     Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Traveler {
+  id          String           @id @default(cuid())
+  householdId String
+  household   Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name        String
+  initials    String
+  color       String
+  homeAirport String
+  cards       OwnedCard[]
+  balances    PointsBalance[]
+  loyalty     LoyaltyAccount[]
+}
+
+model OwnedCard {
+  id                String    @id @default(cuid())
+  travelerId        String
+  traveler          Traveler  @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+  cardId            String
+  card              Card      @relation(fields: [cardId], references: [id])
+  role              CardRole
+  primaryTravelerId String?
+  openedDate        DateTime? @db.Date
+
+  @@unique([travelerId, cardId])
+}
+
+model PointsBalance {
+  id         String         @id @default(cuid())
+  travelerId String
+  traveler   Traveler       @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+  programId  String
+  program    RewardsProgram @relation(fields: [programId], references: [id])
+  points     Int
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([travelerId, programId])
+}
+
+model LoyaltyAccount {
+  id          String         @id @default(cuid())
+  travelerId  String
+  traveler    Traveler       @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+  programId   String
+  program     RewardsProgram @relation(fields: [programId], references: [id])
+  /// Only the last 4 characters — never the full member number or a password.
+  memberLast4 String?        @db.VarChar(4)
+  eliteStatus String?
+
+  @@unique([travelerId, programId])
+}
+
+// ───────────────────────────── Rules database ─────────────────────────────
+
+model RewardsProgram {
+  id                String             @id
+  name              String
+  shortName         String
+  kind              ProgramKind
+  currency          String
+  alliance          String?
+  bookableCarriers  String[]
+  hotelChain        String?
+  canBookForOthers  Boolean            @default(true)
+  awardSearchUrl    String?
+  /// PoolingRule: householdTransfer, maxMembers, description, conditions
+  pooling           Json
+  verification      VerificationStatus @default(unverified)
+  sourceUrl         String?
+  lastVerified      DateTime?          @db.Date
+  notes             String?
+  cards             Card[]
+  balances          PointsBalance[]
+  loyaltyAccounts   LoyaltyAccount[]
+  transfersOut      TransferPartner[]  @relation("from")
+  transfersIn       TransferPartner[]  @relation("to")
+}
+
+model Card {
+  id           String             @id
+  name         String
+  issuer       String
+  programId    String
+  program      RewardsProgram     @relation(fields: [programId], references: [id])
+  network      String
+  art          Json
+  verification VerificationStatus @default(unverified)
+  sourceUrl    String?
+  lastVerified DateTime?          @db.Date
+  annualFees   AnnualFee[]
+  earnRules    EarnRule[]
+  benefits     Benefit[]
+  portalRates  PortalRate[]
+  owned        OwnedCard[]
+}
+
+model AnnualFee {
+  id            String             @id @default(cuid())
+  cardId        String
+  card          Card               @relation(fields: [cardId], references: [id])
+  amountCents   Int
+  effectiveFrom DateTime           @db.Date
+  effectiveTo   DateTime?          @db.Date
+  verification  VerificationStatus @default(unverified)
+  sourceUrl     String?
+  lastVerified  DateTime?          @db.Date
+}
+
+model EarnRule {
+  id             String             @id @default(cuid())
+  cardId         String
+  card           Card               @relation(fields: [cardId], references: [id])
+  category       String
+  multiplier     Decimal            @db.Decimal(5, 2)
+  annualCapCents Int?
+  description    String
+  effectiveFrom  DateTime           @db.Date
+  effectiveTo    DateTime?          @db.Date
+  verification   VerificationStatus @default(unverified)
+  sourceUrl      String?
+  lastVerified   DateTime?          @db.Date
+}
+
+model Benefit {
+  id                      String             @id
+  cardId                  String
+  card                    Card               @relation(fields: [cardId], references: [id])
+  name                    String
+  description             String
+  category                String
+  amountCents             Int?
+  period                  String
+  eligibility             String[]
+  enrollmentRequired      Boolean            @default(false)
+  bookingChannel          String?
+  appliesTo               String[]
+  eligibleTags            String[]
+  minNights               Int?
+  prepaidRequired         Boolean            @default(false)
+  limitations             String[]
+  renewal                 String?
+  appliesToAuthorizedUsers Boolean           @default(false)
+  /// Hotel-program perks: [{ name, kind: guaranteed|when_available, valuation, usefulness }]
+  perks                   Json?
+  effectiveFrom           DateTime           @db.Date
+  effectiveTo             DateTime?          @db.Date
+  verification            VerificationStatus @default(unverified)
+  sourceUrl               String?
+  lastVerified            DateTime?          @db.Date
+  notes                   String?
+  usage                   BenefitUsage[]
+  overrides               BenefitOverride[]
+
+  @@index([cardId, effectiveFrom])
+}
+
+model TransferPartner {
+  id              String             @id
+  fromProgram     String
+  from            RewardsProgram     @relation("from", fields: [fromProgram], references: [id])
+  toProgram       String
+  to              RewardsProgram     @relation("to", fields: [toProgram], references: [id])
+  ratioFrom       Int
+  ratioTo         Int
+  increment       Int
+  minimumTransfer Int
+  transferTime    String
+  recipient       String
+  effectiveFrom   DateTime           @db.Date
+  effectiveTo     DateTime?          @db.Date
+  verification    VerificationStatus @default(unverified)
+  sourceUrl       String?
+  lastVerified    DateTime?          @db.Date
+
+  @@index([toProgram])
+}
+
+model TransferBonus {
+  id           String             @id
+  fromProgram  String
+  toProgram    String
+  bonusPercent Int
+  startDate    DateTime           @db.Date
+  endDate      DateTime           @db.Date
+  verification VerificationStatus @default(unverified)
+  sourceUrl    String?
+  lastVerified DateTime?          @db.Date
+  notes        String?
+}
+
+model PortalRate {
+  id                String             @id
+  programId         String
+  cardId            String
+  card              Card               @relation(fields: [cardId], references: [id])
+  channel           String
+  appliesTo         String[]
+  centsPerPoint     Decimal            @db.Decimal(5, 3)
+  cardOpenedBefore  DateTime?          @db.Date
+  description       String
+  effectiveFrom     DateTime           @db.Date
+  effectiveTo       DateTime?          @db.Date
+  verification      VerificationStatus @default(unverified)
+  sourceUrl         String?
+  lastVerified      DateTime?          @db.Date
+}
+
+/// Audit log for the admin verification workflow.
+model RuleVerification {
+  id         String             @id @default(cuid())
+  ruleType   String
+  ruleId     String
+  status     VerificationStatus
+  verifiedBy String?
+  sourceUrl  String?
+  notes      String?
+  createdAt  DateTime           @default(now())
+
+  @@index([ruleType, ruleId])
+}
+
+// ───────────────────────────── Household activity ─────────────────────────────
+
+model BenefitUsage {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  benefitId   String
+  benefit     Benefit   @relation(fields: [benefitId], references: [id])
+  travelerId  String
+  periodKey   String
+  usedCents   Int       @default(0)
+  enrolled    Boolean   @default(false)
+  notes       String?
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([householdId, benefitId, travelerId, periodKey])
+}
+
+model BenefitOverride {
+  id           String              @id @default(cuid())
+  householdId  String
+  household    Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  benefitId    String
+  benefit      Benefit             @relation(fields: [benefitId], references: [id])
+  amountCents  Int?
+  verification VerificationStatus?
+  lastVerified DateTime?           @db.Date
+  disabled     Boolean             @default(false)
+
+  @@unique([householdId, benefitId])
+}
+
+model Trip {
+  id               String    @id
+  householdId      String
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name             String
+  saved            Boolean   @default(false)
+  destinationId    String
+  departDate       DateTime  @db.Date
+  returnDate       DateTime  @db.Date
+  request          Json
+  result           Json
+  selectedStrategy String
+  itinerary        Json
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([householdId, departDate])
+}
+
+/// Cached provider responses (respect each provider's caching terms).
+model ProviderCache {
+  key       String   @id
+  provider  String
+  payload   Json
+  fetchedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
