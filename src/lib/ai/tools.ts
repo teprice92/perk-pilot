@@ -199,6 +199,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
       const input = OptimizeInput.parse(rawInput);
       if (!destinationById(input.destinationId)) return { error: `Unknown destinationId "${input.destinationId}". Call list_destinations.` };
       if (input.returnDate <= input.departDate) return { error: "returnDate must be after departDate" };
+      if (input.adults + input.children > 9) return { error: "Up to 9 travelers per search." };
       const tripNights = Math.round((Date.parse(input.returnDate) - Date.parse(input.departDate)) / 86_400_000);
       if (input.stops) {
         const bad = input.stops.find((s) => !destinationById(s.destinationId));

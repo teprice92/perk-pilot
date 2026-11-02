@@ -74,6 +74,8 @@ With no environment variables set, the app runs in **guest demo mode**: a sample
 | `PERKPILOT_ADMIN_TOKEN` (+ `DATABASE_URL`) | The rule-verification admin API |
 | `NEXT_PUBLIC_MAP_TILE_URL` | Your own map tile provider (default: OpenStreetMap) |
 | `RATE_LIMIT_PER_MINUTE` | API rate limit per client (default 30) |
+| `TRUSTED_PROXY_HOPS` | Proxies in front of the app, used to read the real client IP (default 1) |
+| `CONCIERGE_DAILY_LIMIT` | Max LLM-backed concierge conversations per instance per day (default 300) |
 
 All keys are server-only. Only variables prefixed `NEXT_PUBLIC_` reach the browser, and the only one is the map tile URL.
 
@@ -134,7 +136,7 @@ perk-pilot/
       └─ server/           db, rules loader, cache, rate limiting
 ```
 
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROVIDERS.md](docs/PROVIDERS.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PROVIDERS.md](docs/PROVIDERS.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [SECURITY.md](SECURITY.md)
 
 ---
 

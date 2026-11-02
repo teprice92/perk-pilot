@@ -259,7 +259,8 @@ function searchBest(
     walk(0, {});
     return best;
   }
-  const BEAM = 160;
+  // Wider beams for typical trips; narrower for 3–4 city trips to bound CPU per request.
+  const BEAM = slots.length > 6 ? 60 : 160;
   let beam: Array<Record<ComponentSlot, PaymentOption>> = [{}];
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i]!;
@@ -679,13 +680,20 @@ export function dateShifts(flexibleDays: number): number[] {
   return [...new Set([-flexibleDays, -1, 1, flexibleDays])].filter((d) => d !== 0).sort((a, b) => a - b);
 }
 
+/** Flexible-date re-optimization is skipped when the base run is already this slow (ms). */
+const FLEX_TIME_BUDGET_MS = 1_200;
+
 export async function optimizeTrip(input: OptimizeInput): Promise<OptimizationResult> {
+  const started = Date.now();
   const data = await fetchTripData(input.request, input.household);
   const result = optimizeWithData(input, data);
   // Phase 4 — flexible dates: fully re-optimize nearby date shifts. Limited to
   // demo/cached flight data so live providers aren't hammered with searches.
-  const shifts = dateShifts(input.request.flexibleDays);
-  if (shifts.length && !data.liveFlights) {
+  // Bounded work: multi-city trips try only the nearest shifts, and nothing runs
+  // when the base optimization already used most of the time budget.
+  const multi = (input.request.stops?.length ?? 1) > 2;
+  const shifts = dateShifts(multi ? Math.min(1, input.request.flexibleDays) : input.request.flexibleDays);
+  if (shifts.length && !data.liveFlights && Date.now() - started < FLEX_TIME_BUDGET_MS) {
     const alternatives = await Promise.all(
       shifts.map(async (shift): Promise<DateAlternative | null> => {
         const request: TripRequest = { ...input.request, departDate: addDays(input.request.departDate, shift), returnDate: addDays(input.request.returnDate, shift), flexibleDays: 0 };

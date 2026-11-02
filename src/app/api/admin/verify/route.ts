@@ -4,6 +4,7 @@ import { STALE_AFTER_DAYS, verificationFreshness } from "@/lib/rules/freshness";
 import { invalidate } from "@/lib/server/cache";
 import { getDb } from "@/lib/server/db";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
+import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/request";
 import { loadRules } from "@/lib/server/rules-db";
 
 export const runtime = "nodejs";
@@ -34,13 +35,15 @@ const Body = z.object({
 function authorized(req: Request): boolean {
   const expected = process.env.PERKPILOT_ADMIN_TOKEN;
   const got = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!expected || expected.length < 16) return false;
+  if (!expected || expected.length < 32) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(got);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function GET(req: Request) {
+  const rl = rateLimit(clientKey(req, "admin"), 30);
+  if (!rl.ok) return tooMany(rl.resetAt);
   if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const rules = await loadRules();
   const today = new Date().toISOString().slice(0, 10);
@@ -65,7 +68,14 @@ export async function POST(req: Request) {
   if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const db = getDb();
   if (!db) return Response.json({ error: "DATABASE_URL is required for verification" }, { status: 501 });
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  let raw: unknown;
+  try {
+    assertSameOrigin(req);
+    raw = await readJson(req, 16 * 1024);
+  } catch (e) {
+    return errorResponse(e);
+  }
+  const parsed = Body.safeParse(raw);
   if (!parsed.success) return Response.json({ error: "Invalid request", issues: parsed.error.issues.slice(0, 5) }, { status: 422 });
   const v = parsed.data;
   const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
@@ -102,7 +112,10 @@ export async function POST(req: Request) {
       await tx.ruleVerification.create({ data: { ruleType: v.ruleType, ruleId: v.ruleId, status: v.status, verifiedBy: v.verifiedBy, sourceUrl: v.sourceUrl, notes: v.notes } });
     });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "Update failed" }, { status: 400 });
+    // Don't echo database internals; P2025 = record not found.
+    const notFound = typeof e === "object" && e !== null && (e as { code?: string }).code === "P2025";
+    if (!notFound) console.error("[perkpilot] admin verify failed", e);
+    return Response.json({ error: notFound ? "Rule not found" : "Update failed" }, { status: notFound ? 404 : 400 });
   }
   invalidate("rules");
   return Response.json({ ok: true });

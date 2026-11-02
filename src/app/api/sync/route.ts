@@ -1,8 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { BenefitOverrideSchema, BenefitUsageSchema, HouseholdSchema } from "@/lib/domain/schemas";
+import { DataImportSchema } from "@/lib/domain/schemas";
 import { getDb } from "@/lib/server/db";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
+import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/request";
 
 export const runtime = "nodejs";
 
@@ -15,18 +16,12 @@ export const runtime = "nodejs";
 const SYNC_ID = "sync-household";
 const MAX_BYTES = 8 * 1024 * 1024;
 
-const SnapshotSchema = z.object({
-  household: HouseholdSchema,
-  usage: z.array(BenefitUsageSchema).max(2000),
-  overrides: z.array(BenefitOverrideSchema).max(500),
-  trips: z.array(z.record(z.string(), z.unknown())).max(50),
-  savedAt: z.string().max(40),
-});
+const SnapshotSchema = DataImportSchema.extend({ savedAt: z.string().max(40) });
 
 function authorized(req: Request): boolean {
   const expected = process.env.PERKPILOT_SYNC_TOKEN;
   const got = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!expected || expected.length < 16) return false;
+  if (!expected || expected.length < 32) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(got);
   return a.length === b.length && timingSafeEqual(a, b);
@@ -48,9 +43,15 @@ export async function PUT(req: Request) {
   const db = getDb();
   if (!db || !process.env.PERKPILOT_SYNC_TOKEN) return Response.json({ error: "Sync is not configured on this server" }, { status: 501 });
   if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES) return Response.json({ error: "Snapshot too large" }, { status: 413 });
-  const parsed = SnapshotSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Invalid snapshot", issues: parsed.error.issues.slice(0, 5) }, { status: 422 });
+  let body: unknown;
+  try {
+    assertSameOrigin(req);
+    body = await readJson(req, MAX_BYTES);
+  } catch (e) {
+    return errorResponse(e);
+  }
+  const parsed = SnapshotSchema.safeParse(body);
+  if (!parsed.success) return Response.json({ error: "Invalid snapshot", issues: parsed.error.issues.slice(0, 5).map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 422 });
   const s = parsed.data;
   const base = {
     name: s.household.name,

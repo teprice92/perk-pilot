@@ -10,6 +10,8 @@ export interface ChatTurn {
 
 const MODEL = process.env.PERKPILOT_LLM_MODEL || "claude-opus-5-5";
 const MAX_STEPS = 8;
+/** Cap on tool-call results fed back to the model, per call (keeps context and cost bounded). */
+const MAX_TOOL_RESULT_CHARS = 24_000;
 
 function systemPrompt(today: string, tripContext?: string) {
   return `You are PerkPilot's AI travel concierge for a household of travelers who hold the American Express Platinum Card and the Chase Sapphire Reserve. Today is ${today}.
@@ -30,10 +32,11 @@ Hard rules:
 Style: short paragraphs and tight bullet lists in Markdown. Lead with the recommendation, then the why, then the trade-offs between the three strategies (Maximum Savings, Balanced Value, Maximum Luxury). End with one clear next step.${tripContext ? `\n\nThe user is looking at this saved trip:\n${tripContext}` : ""}`;
 }
 
-export async function runConcierge(history: ChatTurn[], ctx: ToolContext, tripContext?: string): Promise<{ text: string; mode: "llm" | "deterministic"; model?: string }> {
+export async function runConcierge(history: ChatTurn[], ctx: ToolContext, tripContext?: string, opts: { allowLlm?: boolean } = {}): Promise<{ text: string; mode: "llm" | "deterministic"; model?: string }> {
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { text: await fallbackConcierge(lastUser, ctx), mode: "deterministic" };
+  if (!process.env.ANTHROPIC_API_KEY || opts.allowLlm === false) {
+    const note = process.env.ANTHROPIC_API_KEY ? "\n\n_(The AI concierge's daily usage limit was reached, so this answer used deterministic mode.)_" : "";
+    return { text: (await fallbackConcierge(lastUser, ctx)) + note, mode: "deterministic" };
   }
 
   const client = new Anthropic();
@@ -73,9 +76,10 @@ export async function runConcierge(history: ChatTurn[], ctx: ToolContext, tripCo
         toolUses.map(async (t) => {
           try {
             const out = await runTool(t.name, t.input, ctx);
-            return { type: "tool_result" as const, tool_use_id: t.id, content: JSON.stringify(out) };
+            const json = JSON.stringify(out);
+            return { type: "tool_result" as const, tool_use_id: t.id, content: json.length > MAX_TOOL_RESULT_CHARS ? `${json.slice(0, MAX_TOOL_RESULT_CHARS)}…(truncated)` : json };
           } catch (e) {
-            return { type: "tool_result" as const, tool_use_id: t.id, content: `Tool error: ${e instanceof Error ? e.message : String(e)}`, is_error: true };
+            return { type: "tool_result" as const, tool_use_id: t.id, content: `Tool error: ${(e instanceof Error ? e.message : String(e)).slice(0, 500)}`, is_error: true };
           }
         }),
       );

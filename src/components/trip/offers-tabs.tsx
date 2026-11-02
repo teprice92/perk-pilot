@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHref } from "@/lib/safe-url";
 import { Check, ExternalLink, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatCpp, formatUSD } from "@/lib/calc/money";
@@ -97,7 +98,7 @@ export function FlightsTab({ result, plan, rules }: { result: OptimizationResult
             </div>
             <div className="text-right">
               <p className="font-display text-xl tabular">{formatUSD(f.cashPerPersonCents)}<span className="text-xs text-fg-subtle"> /person</span></p>
-              <a href={f.bookingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">Verify fare <ExternalLink className="size-3" /></a>
+              <a href={safeHref(f.bookingUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">Verify fare <ExternalLink className="size-3" /></a>
             </div>
           </div>
           <OptionTable options={opts.filter((o) => o.offerId === f.id)} plan={plan} rules={rules} />
@@ -236,7 +237,7 @@ export function ExperiencesTab({ trip, rules }: { trip: SavedTrip; rules: RulesR
                   {itinerary.days.map((d, i) => <option key={d.date} value={d.date}>Day {i + 1} · {formatDate(d.date, { weekday: "short", month: "short", day: "numeric" })}</option>)}
                 </Select>
                 <Button size="sm" variant="outline" onClick={() => add(e)}><Plus /> Add</Button>
-                <a href={e.bookingUrl} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-accent hover:underline">Look up <ExternalLink className="size-3" /></a>
+                <a href={safeHref(e.bookingUrl)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-accent hover:underline">Look up <ExternalLink className="size-3" /></a>
               </div>
             </article>
           );

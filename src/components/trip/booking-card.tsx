@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHref } from "@/lib/safe-url";
 import { ChevronDown, ExternalLink, Hotel, Plane, PlaneLanding, Ticket } from "lucide-react";
 import { useState } from "react";
 import { formatCpp, formatUSD } from "@/lib/calc/money";
@@ -87,11 +88,11 @@ export function BookingCard({ info, component, result, rules }: { info: SlotInfo
           </ol>
           {o.warnings.length > 0 && <ul className="space-y-1 text-xs text-warning">{o.warnings.map((w) => <li key={w}>⚠ {w}</li>)}</ul>}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <a href={o.bookingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-fg px-3.5 py-1.5 text-xs font-medium text-bg hover:opacity-90">
+            <a href={safeHref(o.bookingUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-fg px-3.5 py-1.5 text-xs font-medium text-bg hover:opacity-90">
               Open booking site <ExternalLink className="size-3.5" />
             </a>
             {o.verifyUrl && o.verifyUrl !== o.bookingUrl && (
-              <a href={o.verifyUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-xs font-medium hover:bg-muted">
+              <a href={safeHref(o.verifyUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-xs font-medium hover:bg-muted">
                 Verify award space <ExternalLink className="size-3.5" />
               </a>
             )}

@@ -83,11 +83,7 @@ For multi-household deployments, replace the token with real authentication, for
 
 ## Security
 
-- API keys are read only on the server. The browser receives only `NEXT_PUBLIC_MAP_TILE_URL`.
-- Every API input is validated with Zod and size-bounded. Endpoints are rate limited per IP.
-- Security headers are set in `next.config.ts` (nosniff, frame-deny, referrer policy, permissions policy).
-- The concierge sees only the household summary it needs. Tool inputs are validated again before execution.
-- No secrets, card numbers or loyalty credentials are stored anywhere.
+See [SECURITY.md](../SECURITY.md) for the threat model and controls: server-only keys, trusted-proxy IP rate limiting, the daily LLM ceiling, same-origin enforcement, streaming body caps, Zod validation of every input (including imports and sync), `safeHref` for all external links, and CSP/HSTS headers.
 
 ## PWA and offline
 

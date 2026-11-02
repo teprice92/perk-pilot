@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safe-url";
 import type { Destination } from "@/lib/domain/types";
 import type { ImageResult } from "@/lib/providers/types";
 import { cn } from "@/lib/utils";
@@ -43,12 +44,12 @@ export function DestinationArt({ destination, className, children, variant = "hi
       </svg>
       {photo && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo.url} alt={photo.alt} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+        <img src={safeHref(photo.url)} alt={photo.alt} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
       )}
       <div className={cn("absolute inset-0 bg-gradient-to-t to-transparent", photo ? "from-black/65 via-black/15" : "from-black/45 via-black/5")} />
       {photo && (
         <p className="absolute bottom-1.5 right-3 z-10 text-[10px] text-white/75">
-          Photo by <a href={photo.photographerUrl} target="_blank" rel="noopener noreferrer" className="underline">{photo.photographer}</a> on <a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">Unsplash</a>
+          Photo by <a href={safeHref(photo.photographerUrl)} target="_blank" rel="noopener noreferrer" className="underline">{photo.photographer}</a> on <a href={safeHref(photo.sourceUrl)} target="_blank" rel="noopener noreferrer" className="underline">Unsplash</a>
         </p>
       )}
       <div className="relative h-full">{children}</div>

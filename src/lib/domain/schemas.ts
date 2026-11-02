@@ -23,6 +23,7 @@ export const TripRequestSchema = z
     notes: z.string().max(500).optional(),
   })
   .refine((r) => r.returnDate > r.departDate, { message: "Return date must be after departure", path: ["returnDate"] })
+  .refine((r) => r.adults + r.children <= 9, { message: "Up to 9 travelers per search (the airline booking limit)", path: ["adults"] })
   .refine((r) => !r.stops || r.stops.reduce((a, s) => a + s.nights, 0) === Math.round((Date.parse(r.returnDate) - Date.parse(r.departDate)) / 86_400_000), {
     message: "Multi-city stop nights must add up to the trip length",
     path: ["stops"],
@@ -78,7 +79,7 @@ export const HouseholdSchema = z.object({
       hourPenaltyCents: z.number().int().min(0).max(100_000),
     }),
   }),
-  valuations: z.record(z.string(), z.number().min(0).max(10)),
+  valuations: z.record(z.string().max(40), z.number().min(0).max(10)).refine((v) => Object.keys(v).length <= 100, { message: "Too many valuations" }),
   minRedemptionCpp: z.number().min(0).max(10),
   cashBudgetCents: z.number().int().min(0).max(100_000_000),
 });
@@ -109,3 +110,38 @@ export const OptimizeBodySchema = z.object({
 });
 
 export type OptimizeBody = z.infer<typeof OptimizeBodySchema>;
+
+/**
+ * Backup files and synced snapshots are untrusted input. Household, usage and
+ * overrides are validated strictly; trips are structurally checked here and
+ * normalized on load, and every URL inside them is sanitized at render time.
+ */
+const TripSnapshotSchema = z
+  .object({
+    id: z.string().max(80),
+    name: z.string().max(120),
+    createdAt: z.string().max(40),
+    updatedAt: z.string().max(40),
+    saved: z.boolean(),
+    selectedStrategy: z.enum(["savings", "balanced", "luxury"]),
+    itineraryEdited: z.boolean(),
+    result: z
+      .object({
+        id: z.string().max(80),
+        request: TripRequestSchema,
+        plans: z.object({ savings: z.object({}).passthrough(), balanced: z.object({}).passthrough(), luxury: z.object({}).passthrough() }),
+        destination: z.object({ id: z.string().max(64), name: z.string().max(120) }).passthrough(),
+        flights: z.record(z.string().max(20), z.array(z.object({}).passthrough()).max(400)),
+        hotels: z.array(z.object({}).passthrough()).max(200),
+      })
+      .passthrough(),
+    itinerary: z.object({ days: z.array(z.object({ date: z.string().max(10), items: z.array(z.object({}).passthrough()).max(60) })).max(40) }).passthrough(),
+  })
+  .passthrough();
+
+export const DataImportSchema = z.object({
+  household: HouseholdSchema,
+  usage: z.array(BenefitUsageSchema).max(2000).optional(),
+  overrides: z.array(BenefitOverrideSchema).max(500).optional(),
+  trips: z.array(TripSnapshotSchema).max(50).optional(),
+});

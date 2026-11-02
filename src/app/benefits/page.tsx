@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHref } from "@/lib/safe-url";
 import { Bell, BellOff, CalendarClock, CalendarPlus, CheckCircle2, ExternalLink, History, Pencil, PiggyBank, Plane, Sparkles, Ticket } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatUSD } from "@/lib/calc/money";
@@ -161,7 +162,7 @@ export default function BenefitsPage() {
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" onClick={() => setEditFor(c.benefit)} aria-label="Edit rule"><Pencil /> Edit rule</Button>
-                    {c.benefit.sourceUrl && <a href={c.benefit.sourceUrl} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-accent hover:underline">Official terms <ExternalLink className="size-3" /></a>}
+                    {c.benefit.sourceUrl && <a href={safeHref(c.benefit.sourceUrl)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-accent hover:underline">Official terms <ExternalLink className="size-3" /></a>}
                   </div>
                 </article>
               );
@@ -283,7 +284,7 @@ function EditRuleDialog({ benefit, onClose }: { benefit: Benefit | null; onClose
           <span>I verified this against the official source today</span>
           <Switch checked={verified} onChange={setVerified} label="Mark verified" />
         </label>
-        {benefit.sourceUrl && <a href={benefit.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">Open official terms <ExternalLink className="size-3.5" /></a>}
+        {benefit.sourceUrl && <a href={safeHref(benefit.sourceUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">Open official terms <ExternalLink className="size-3.5" /></a>}
         <div className="flex justify-between gap-2">
           {has ? <Button variant="ghost" onClick={() => { clearOverride(benefit.id); onClose(); toast("Restored default rule"); }}>Restore default</Button> : <span />}
           <div className="flex gap-2">
@@ -369,7 +370,7 @@ function RuleHistory() {
                 <td className="p-4 tabular">{b.amountCents ? `${formatUSD(b.amountCents)} / ${b.period.replace(/_/g, " ")}` : "—"}</td>
                 <td className="p-4 tabular text-xs">{b.effectiveFrom} → {b.effectiveTo ?? "present"} {active ? <Badge variant="success" className="ml-1">Active</Badge> : <Badge className="ml-1">{b.effectiveFrom > today ? "Future" : "Superseded"}</Badge>}</td>
                 <td className="p-4"><VerificationBadge status={b.verification} lastVerified={b.lastVerified} /></td>
-                <td className="p-4">{b.sourceUrl && <a href={b.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">Link <ExternalLink className="size-3" /></a>}</td>
+                <td className="p-4">{b.sourceUrl && <a href={safeHref(b.sourceUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">Link <ExternalLink className="size-3" /></a>}</td>
               </tr>
             );
           })}

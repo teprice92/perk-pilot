@@ -1,8 +1,10 @@
 "use client";
 
+import { safeHref } from "@/lib/safe-url";
 import { CheckCircle2, CircleDashed, CloudDownload, CloudUpload, Download, ExternalLink, KeyRound, Monitor, Moon, RefreshCw, Sun, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Cabin, TravelStyle } from "@/lib/domain/types";
+import { DataImportSchema } from "@/lib/domain/schemas";
 import { useRules } from "@/lib/hooks/use-rules";
 import type { ProviderInfo } from "@/lib/providers/types";
 import { useApp } from "@/lib/store/app-store";
@@ -163,9 +165,11 @@ function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
   };
   const importAll = async (f: File) => {
     try {
-      const data = JSON.parse(await f.text());
-      if (!data.household?.travelers) throw new Error("Not a PerkPilot backup");
-      state.importData(data);
+      if (f.size > 20 * 1024 * 1024) throw new Error("File is too large to be a PerkPilot backup");
+      const parsed = DataImportSchema.safeParse(JSON.parse(await f.text()));
+      if (!parsed.success) throw new Error("Not a valid PerkPilot backup");
+      const data = parsed.data;
+      state.importData(data as Parameters<typeof state.importData>[0]);
       toast("Backup restored", `${data.trips?.length ?? 0} trips imported`);
     } catch (e) {
       toast("Import failed", e instanceof Error ? e.message : "Invalid file", "warning");
@@ -180,7 +184,9 @@ function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
       if (dir === "pull") {
         if (!data.snapshot) throw new Error("Nothing has been synced yet");
-        state.importData(data.snapshot);
+        const snap = DataImportSchema.safeParse(data.snapshot);
+        if (!snap.success) throw new Error("The synced data is invalid");
+        state.importData(snap.data as Parameters<typeof state.importData>[0]);
       }
       toast(dir === "push" ? "Synced to server" : "Pulled latest household data");
     } catch (e) {
@@ -219,7 +225,7 @@ function IntegrationRow({ name, configured, note, docs, env, kind }: { name: str
       <p className="mt-1 text-xs text-fg-muted">{note}</p>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-fg-subtle">
         {env && env.length > 0 && <span>{env.map((e) => <code key={e} className="mr-1 rounded bg-muted px-1">{e}</code>)}</span>}
-        {docs && <a href={docs} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:underline">Docs <ExternalLink className="size-3" /></a>}
+        {docs && <a href={safeHref(docs)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:underline">Docs <ExternalLink className="size-3" /></a>}
       </div>
     </li>
   );

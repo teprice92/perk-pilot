@@ -1,3 +1,4 @@
+import { safeHref } from "@/lib/safe-url";
 import { Fragment, type ReactNode } from "react";
 
 /** Tiny, safe Markdown renderer (bold, italic, code, links, lists, headings). No raw HTML. */
@@ -15,7 +16,7 @@ function inline(text: string, key: string): ReactNode[] {
     else if (tok.startsWith("`")) out.push(<code key={k} className="rounded bg-muted px-1 text-[0.9em]">{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("[")) {
       const [, label, href] = tok.match(/\[([^\]]+)\]\(([^)]+)\)/)!;
-      out.push(<a key={k} href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline">{label}</a>);
+      out.push(<a key={k} href={safeHref(href)} target="_blank" rel="noopener noreferrer" className="text-accent underline">{label}</a>);
     } else out.push(<em key={k} className="text-fg-muted">{tok.slice(1, -1)}</em>);
     last = m.index + tok.length;
   }

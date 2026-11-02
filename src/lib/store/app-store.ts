@@ -187,7 +187,7 @@ export const useApp = create<AppState>()(
           household: data.household,
           usage: data.usage ?? s.usage,
           overrides: data.overrides ?? s.overrides,
-          trips: data.trips ?? s.trips,
+          trips: data.trips ? data.trips.map((t) => ({ ...t, result: normalizeResult(t.result) })) : s.trips,
         })),
     }),
     {
