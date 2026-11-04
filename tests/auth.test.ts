@@ -6,6 +6,8 @@ import { proxy } from "@/proxy";
 import { demoHousehold } from "@/lib/demo/household";
 import type { SavedTrip } from "@/lib/store/app-store";
 
+vi.mock("server-only", () => ({}));
+
 const SECRET = "x".repeat(40);
 afterEach(() => vi.unstubAllEnvs());
 
@@ -80,5 +82,31 @@ describe("household sync merge", () => {
     const ids = (x: { trips: SavedTrip[] }) => x.trips.map((t) => t.id).sort();
     expect(ids(mergeSnapshot(local, { household, trips: [] }))).toEqual(["draft"]);
     expect(ids(mergeSnapshot(local, { household, trips: [] }, { firstSync: true }))).toEqual(["draft", "gone"]);
+  });
+});
+
+describe("setup diagnostics", () => {
+  it("turns missing tables and unreachable databases into actionable 503s", async () => {
+    const { errorResponse } = await import("@/lib/server/request");
+    const missing = errorResponse(Object.assign(new Error("The table `public.AuthChallenge` does not exist in the current database."), { code: "P2021" }));
+    expect(missing.status).toBe(503);
+    expect((await missing.json()).error).toMatch(/prisma db push/);
+    const down = errorResponse(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }));
+    expect(down.status).toBe(503);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(errorResponse(new Error("boom")).status).toBe(500);
+  });
+
+  it("rejects a malformed PERKPILOT_ORIGIN or mismatched RP ID with a clear message", async () => {
+    const { relyingParty } = await import("@/lib/server/auth/config");
+    const req = new Request("https://app.example.com/api/auth/register/options");
+    vi.stubEnv("PERKPILOT_ORIGIN", "app.example.com");
+    expect(() => relyingParty(req)).toThrow(/include https:\/\//);
+    vi.stubEnv("PERKPILOT_ORIGIN", "https://app.example.com/");
+    expect(relyingParty(req)).toMatchObject({ rpID: "app.example.com", origin: "https://app.example.com" });
+    vi.stubEnv("PERKPILOT_RP_ID", "other.com");
+    expect(() => relyingParty(req)).toThrow(/PERKPILOT_RP_ID/);
+    vi.stubEnv("PERKPILOT_RP_ID", "example.com");
+    expect(relyingParty(req).rpID).toBe("example.com");
   });
 });

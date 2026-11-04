@@ -32,13 +32,24 @@ export function setupCode(): string | null {
 export function relyingParty(req: Request): { rpID: string; origin: string; rpName: string; secure: boolean } {
   const configured = process.env.PERKPILOT_ORIGIN;
   let origin: string;
-  if (configured) origin = new URL(configured).origin;
-  else {
+  if (configured) {
+    let parsed: URL;
+    try {
+      parsed = new URL(configured.trim());
+    } catch {
+      throw new HttpError(503, "PERKPILOT_ORIGIN must be a full address like https://your-app.vercel.app (include https://)");
+    }
+    if (parsed.protocol !== "https:" && parsed.hostname !== "localhost") throw new HttpError(503, "PERKPILOT_ORIGIN must start with https://");
+    origin = parsed.origin;
+  } else {
     const url = new URL(req.url);
     const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? url.host;
     const proto = req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
     origin = `${proto}://${host}`;
   }
   const u = new URL(origin);
-  return { rpID: process.env.PERKPILOT_RP_ID ?? u.hostname, origin: u.origin, rpName: "PerkPilot", secure: u.protocol === "https:" };
+  const rpID = process.env.PERKPILOT_RP_ID?.trim() || u.hostname;
+  if (u.hostname !== rpID && !u.hostname.endsWith(`.${rpID}`))
+    throw new HttpError(503, `PERKPILOT_RP_ID (${rpID}) must be your site's domain (${u.hostname}) or a parent of it — or leave it unset`);
+  return { rpID, origin: u.origin, rpName: "PerkPilot", secure: u.protocol === "https:" };
 }
