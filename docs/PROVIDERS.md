@@ -46,6 +46,8 @@ Register the provider in `src/lib/providers/registry.ts`. Selection is opt-in: a
 
 ### Composition
 
+**Destination catalogue.** `demo/catalog.ts` holds twelve hand-curated destinations (authored demo hotels and experiences) plus the extended list in `demo/catalog-world.ts` (~60 more, and ~110 extra airports). Extended destinations get template demo data — fictional hotels named after real neighbourhoods and generic, “(demo listing)”-labelled experiences — with routes derived from the airport's country (`routesFor()`). Live providers replace that data the same way they do for curated destinations.
+
 `registry.ts` picks the cash flight source (Duffel when enabled, otherwise demo) and wraps it with `withAwards()` when Seats.aero is enabled. Hotels use the demo catalogue (for card hotel programs) plus Rooms.aero award nights when enabled (`withHotelAwards()`); experiences use Google Places when enabled, otherwise demo. Every provider failure becomes a per-search warning shown in the UI, never a silent fallback to unlabeled data. Flexible-date re-optimization only runs on demo or cached flight data, to avoid multiplying live API calls.
 
 ## Verified benefits data

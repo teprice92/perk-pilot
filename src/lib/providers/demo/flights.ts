@@ -1,6 +1,6 @@
 import type { AwardOption, Cabin, FlightOffer } from "@/lib/domain/types";
 import { PROGRAMS } from "@/lib/rules/seed";
-import { AIRPORTS, CARRIERS, ROUTES } from "./destinations";
+import { AIRPORTS, CARRIERS, routesFor } from "./destinations";
 import { haversineKm, kmToMiles } from "./geo";
 import { seeded } from "./random";
 import { googleFlightsUrl } from "@/lib/links";
@@ -18,6 +18,8 @@ const TZ: Record<string, number> = {
   ATL: -5, MIA: -5, IAD: -5, DCA: -5, PHL: -5, DTW: -5, CLT: -5, HNL: -10, OGG: -10,
   HND: 9, NRT: 9, KIX: 9, CDG: 1, ORY: 1, LHR: 0, LGW: 0, FCO: 1, LIS: 0, CUN: -5, DPS: 8, KEF: 0,
 };
+
+const tzOf = (code: string): number => TZ[code] ?? AIRPORTS[code]?.tz ?? 0;
 
 const BANDS = [700, 1500, 3000, 5000, 7000, Infinity];
 const BASE_ECON = [7500, 12500, 20000, 30000, 40000, 47500];
@@ -148,7 +150,7 @@ function priceCash(miles: number, cabin: Cabin, season: number, rnd: () => numbe
 
 export function generateFlights(params: FlightSearchParams & { destinationId: string; bestMonths: number[] }): FlightSearchResult {
   const fetchedAt = new Date().toISOString();
-  const routes = ROUTES[params.destinationId] ?? [];
+  const routes = routesFor(params.destinationId);
   const warnings: string[] = [];
   if (!AIRPORTS[params.origin]) warnings.push(`Origin ${params.origin} is not in the demo airport list; distances are approximate.`);
 
@@ -169,7 +171,7 @@ export function generateFlights(params: FlightSearchParams & { destinationId: st
         const durationMin = Math.round((miles / 480) * 60 + 40 + (stops ? 140 + rnd() * 60 : 0));
         const depHour = [7, 9, 11, 13, 16, 18, 21, 22][Math.floor(rnd() * 8)]!;
         const departTime = `${String(depHour).padStart(2, "0")}:${rnd() > 0.5 ? "15" : "45"}`;
-        const tzDelta = ((TZ[to] ?? 0) - (TZ[from] ?? 0)) * 60;
+        const tzDelta = (tzOf(to) - tzOf(from)) * 60;
         const arr = addMinutes(departTime, durationMin + tzDelta);
         const season = seasonFactor(date, params.bestMonths);
         const cabins = cheapestOnly ? (["economy"] as Cabin[]) : cabinsFor(r.carrier, miles).filter((c) => params.cabins.includes(c));
@@ -230,10 +232,14 @@ export function generateFlights(params: FlightSearchParams & { destinationId: st
 
 /* ───────────── Multi-city legs (demo) ───────────── */
 
+const EUROPE = new Set(["FR", "GB", "IT", "PT", "IS", "ES", "NL", "GR", "IE", "CH", "CZ", "AT", "TR"]);
+const NORTH_AMERICA = new Set(["US", "CA", "MX"]);
+
 const REGIONAL: Array<{ test: (a: string, b: string) => boolean; carriers: string[] }> = [
   { test: (a, b) => AIRPORTS[a]?.country === "JP" && AIRPORTS[b]?.country === "JP", carriers: ["NH", "JL"] },
   { test: (a, b) => AIRPORTS[a]?.country === "US" && AIRPORTS[b]?.country === "US", carriers: ["UA", "DL", "AA", "AS", "WN"] },
-  { test: (a, b) => ["FR", "GB", "IT", "PT", "IS"].includes(AIRPORTS[a]?.country ?? "") && ["FR", "GB", "IT", "PT", "IS"].includes(AIRPORTS[b]?.country ?? ""), carriers: ["BA", "AF", "TP", "FI"] },
+  { test: (a, b) => EUROPE.has(AIRPORTS[a]?.country ?? "") && EUROPE.has(AIRPORTS[b]?.country ?? ""), carriers: ["BA", "AF", "TP", "FI"] },
+  { test: (a, b) => NORTH_AMERICA.has(AIRPORTS[a]?.country ?? "") && NORTH_AMERICA.has(AIRPORTS[b]?.country ?? ""), carriers: ["UA", "DL", "AA", "AC"] },
 ];
 
 /**
@@ -243,8 +249,8 @@ const REGIONAL: Array<{ test: (a: string, b: string) => boolean; carriers: strin
 export function generateLeg(p: LegSearchParams): FlightOffer[] {
   const fetchedAt = new Date().toISOString();
   const offers: FlightOffer[] = [];
-  const fromRoutes = new Set((ROUTES[p.fromDestinationId ?? ""] ?? []).map((r) => r.carrier));
-  const toRoutes = (ROUTES[p.toDestinationId ?? ""] ?? []).map((r) => r.carrier);
+  const fromRoutes = new Set(routesFor(p.fromDestinationId ?? "").map((r) => r.carrier));
+  const toRoutes = routesFor(p.toDestinationId ?? "").map((r) => r.carrier);
   for (const from of p.from) {
     for (const to of p.to) {
       const a = AIRPORTS[from];
@@ -262,7 +268,7 @@ export function generateLeg(p: LegSearchParams): FlightOffer[] {
         const durationMin = Math.round((miles / 450) * 60 + 45 + (stops ? 150 : 0));
         const depHour = [7, 9, 11, 14, 17, 19][Math.floor(rnd() * 6)]!;
         const departTime = `${String(depHour).padStart(2, "0")}:${rnd() > 0.5 ? "10" : "40"}`;
-        const arr = addMinutes(departTime, durationMin + ((TZ[to] ?? 0) - (TZ[from] ?? 0)) * 60);
+        const arr = addMinutes(departTime, durationMin + (tzOf(to) - tzOf(from)) * 60);
         const flightNo = `${c}${100 + Math.floor(rnd() * 800)}`;
         const cabins = (miles < 1200 ? (["economy", "business"] as Cabin[]) : cabinsFor(c, miles)).filter((x) => p.cabins.includes(x));
         for (const cabin of cabins) {

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatPoints, formatUSD } from "@/lib/calc/money";
 import { useRules } from "@/lib/hooks/use-rules";
-import { DESTINATIONS } from "@/lib/providers/demo/catalog";
+import { DESTINATIONS, FEATURED_DESTINATIONS } from "@/lib/providers/demo/catalog";
 import { useApp } from "@/lib/store/app-store";
 import { todayISO } from "@/lib/utils";
 import { creditStatuses, householdPoints } from "@/lib/wallet";
@@ -134,10 +134,10 @@ export default function HomePage() {
         <div className="mb-5">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--gold)]">Inspiration</p>
           <h2 className="font-display mt-1 text-3xl">Where your cards shine</h2>
-          <p className="mt-2 max-w-2xl text-sm text-fg-muted">Twelve destinations in the demo catalogue, each with modelled flights, Fine Hotels + Resorts and The Edit-style properties, and curated experiences.</p>
+          <p className="mt-2 max-w-2xl text-sm text-fg-muted">{DESTINATIONS.length} destinations to plan, from Kyoto to Key West. These twelve have hand-curated demo hotels and experiences; the rest use labelled template data until live providers are connected.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {DESTINATIONS.map((d, i) => (
+          {FEATURED_DESTINATIONS.map((d, i) => (
             <motion.button
               key={d.id}
               initial={{ opacity: 0, y: 10 }}
@@ -155,6 +155,17 @@ export default function HomePage() {
                 </div>
               </DestinationArt>
             </motion.button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">More places you can plan</p>
+        <div className="flex flex-wrap gap-2">
+          {DESTINATIONS.filter((d) => !FEATURED_DESTINATIONS.includes(d)).map((d) => (
+            <button key={d.id} type="button" onClick={() => pick(d.name)} className="rounded-full border border-border bg-elevated px-3 py-1 text-xs font-medium text-fg-muted transition hover:border-border-strong hover:text-fg">
+              <span aria-hidden>{d.emoji}</span> {d.name}
+            </button>
           ))}
         </div>
       </section>

@@ -361,13 +361,97 @@ const EXPERIENCES: Record<string, E[]> = {
   ],
 };
 
+/* ─────────────── Template data for the extended catalogue ─────────────── */
+
+/** Home hubs used as the connection point for foreign carriers. */
+const HOME_HUB: Record<string, string> = { BA: "LHR", AF: "CDG", VS: "LHR", EK: "DXB", QR: "DOH", SQ: "SIN", CX: "HKG", NH: "HND", JL: "HND", AC: "YYZ", TP: "LIS", FI: "KEF" };
+/** International airports with modelled nonstop service from the carriers' US hubs. */
+const GATEWAYS = new Set(["BCN", "MAD", "AMS", "ATH", "DUB", "EDI", "ZRH", "IST", "DXB", "SIN", "ICN", "HKG", "SYD", "MEX", "SJD", "LIR", "PLS", "MBJ", "SJU", "YVR", "YYC", "YUL", "LIM", "EZE", "GIG", "NAP", "PPT", "CPT"]);
+/** Where US carriers' passengers connect for airports without US nonstops. */
+const CONNECT: Record<string, string> = { FLR: "FCO", JTR: "ATH", PRG: "AMS", VIE: "FRA", RAK: "MAD", CUZ: "LIM", BKK: "HND", HKT: "BKK", ZQN: "AKL", MLE: "DOH" };
+const US_HUBS = new Set(Object.keys(AIRPORTS).filter((k) => AIRPORTS[k]!.country === "US"));
+
+function carriersForCountry(country: string): string[] {
+  if (country === "US") return ["UA", "DL", "AA", "AS"];
+  if (country === "CA") return ["AC", "UA", "DL", "AA"];
+  if (["MX", "CR", "TC", "JM"].includes(country)) return ["AA", "UA", "DL", "B6"];
+  if (["PE", "AR", "BR"].includes(country)) return ["AA", "UA", "DL"];
+  if (["ES", "NL", "IT", "GR", "IE", "GB", "CH", "CZ", "AT", "TR"].includes(country)) return ["UA", "DL", "AA", "BA", "AF", "VS"];
+  if (["MA"].includes(country)) return ["AF", "BA", "DL"];
+  if (["AE"].includes(country)) return ["EK", "QR", "UA"];
+  if (["ZA"].includes(country)) return ["UA", "DL", "QR", "EK"];
+  if (["SG", "TH", "KR", "HK"].includes(country)) return ["UA", "DL", "SQ", "CX", "NH"];
+  if (["MV"].includes(country)) return ["QR", "EK", "SQ"];
+  if (["AU", "NZ"].includes(country)) return ["UA", "DL", "AA"];
+  if (["PF"].includes(country)) return ["UA", "AF"];
+  return ["UA", "DL", "AA"];
+}
+
+/** Carriers and nonstop origins for a destination: hand-modelled, or derived from its airport. */
+export function routesFor(destinationId: string): Array<{ carrier: string; nonstop: string[]; via: string }> {
+  if (ROUTES[destinationId]) return ROUTES[destinationId]!;
+  const dest = destinationById(destinationId);
+  const airport = dest?.airports[0];
+  if (!dest || !airport) return [];
+  const country = AIRPORTS[airport]?.country ?? "US";
+  return carriersForCountry(country)
+    .filter((c) => CARRIERS[c])
+    .map((c) => {
+      const usHubs = CARRIERS[c]!.hubs.filter((h) => US_HUBS.has(h) && h !== airport);
+      const nonstop = country === "US" || GATEWAYS.has(airport) ? usHubs : [];
+      const via = HOME_HUB[c] ?? (nonstop.length ? usHubs[0] : CONNECT[airport]) ?? usHubs[0] ?? "LAX";
+      return { carrier: c, nonstop: nonstop.slice(0, 8), via };
+    });
+}
+
+/** Fictional demo hotels built from the destination's neighbourhoods. */
+function templateHotels(destinationId: string): H[] {
+  const d = destinationById(destinationId);
+  if (!d) return [];
+  const city = d.name.split(/ [&(]|,/)[0]!.trim();
+  const hood = (i: number) => d.neighborhoods[i % d.neighborhoods.length] ?? city;
+  const ci = d.costIndex;
+  const usd = (n: number) => Math.round((n * ci) / 5) * 5;
+  const pts = (n: number) => Math.round((n * ci) / 5000) * 5000;
+  const at = (i: number): [number, number] => [d.lat + [0.006, -0.009, 0.012, -0.004, 0.003][i]!, d.lng + [-0.008, 0.007, 0.004, -0.013, 0.011][i]!];
+  return [
+    [`The ${hood(0)} House`, "luxury", 5, hood(0), ...at(0), usd(780), null, ["amex_fhr", "chase_edit"], null, true, 0, 30, `An intimate luxury hotel in ${hood(0)} with a destination restaurant and spa (fictional demo property).`],
+    [`Park Meridian ${city}`, "luxury", 5, hood(1), ...at(1), usd(560), "hyatt", ["amex_fhr"], Math.min(45000, Math.max(20000, pts(30000))), false, 0, 210, `A Hyatt-affiliated luxury hotel with suites and a rooftop pool (fictional demo property).`, ["chase_select_brand"]],
+    [`${hood(2)} Cedar Hotel`, "upscale", 4, hood(2), ...at(2), usd(340), "marriott", ["amex_thc"], Math.max(35000, pts(55000)), false, 0, 140, `Design-led Marriott-family hotel close to ${hood(2)}'s restaurants (fictional demo property).`],
+    [`${city} Lantern Inn`, "upscale", 4, hood(3), ...at(3), usd(250), "ihg", [], Math.max(25000, pts(40000)), true, 0, 50, `Comfortable IHG-family hotel with breakfast included (fictional demo property).`, ["chase_select_brand"]],
+    [`${hood(1)} Grand`, "upscale", 4, hood(1), ...at(4), usd(300), "hilton", ["amex_thc"], Math.max(40000, pts(70000)), false, d.region === "Caribbean" || d.region === "Hawaii" ? 45 : 0, 260, `Large Hilton-family hotel with a pool and club lounge (fictional demo property).`],
+  ];
+}
+
+/** Template experiences — generic, clearly-labelled demo listings for the extended catalogue. */
+function templateExperiences(destinationId: string): E[] {
+  const d = destinationById(destinationId);
+  if (!d) return [];
+  const city = d.name.split(/ [&(]|,/)[0]!.trim();
+  const hood = (i: number) => d.neighborhoods[i % d.neighborhoods.length] ?? city;
+  const ci = d.costIndex;
+  const usd = (n: number) => Math.round((n * ci) / 5) * 5;
+  const at = (i: number): [number, number] => [d.lat + ((i % 5) - 2) * 0.006, d.lng + (((i * 3) % 7) - 3) * 0.005];
+  return [
+    [`${city} food & market walk (demo listing)`, "food", ["food", "culture"], usd(95), 180, "morning", hood(0), ...at(0), 4.8, false, [], `Taste your way through ${city}'s markets and local specialities with a guide.`],
+    [`Chef's tasting dinner (demo listing)`, "dining", ["food", "romantic", "luxury"], usd(240), 150, "evening", hood(1), ...at(1), 4.8, true, [], "A multi-course seasonal tasting menu at one of the city's acclaimed restaurants."],
+    [`${hood(2)} history walk (demo listing)`, "culture", ["culture"], usd(35), 150, "morning", hood(2), ...at(2), 4.7, false, [], `The landmarks and back streets of ${hood(2)} with a local historian.`],
+    [`Top art museum visit (demo listing)`, "museum", ["culture", "family"], usd(30), 150, "afternoon", hood(0), ...at(3), 4.6, false, [], "Timed entry to the city's best-loved museum — book ahead in high season."],
+    [`Sunset views & cocktails (demo listing)`, "nature", ["romantic", "nature"], usd(70), 120, "evening", hood(3), ...at(4), 4.6, false, [], "Golden-hour views from the best vantage point in town, drinks included."],
+    [`Spa afternoon for two (demo listing)`, "wellness", ["wellness", "romantic"], usd(190), 180, "afternoon", hood(1), ...at(5), 4.6, true, [], "Treatments, thermal pools and a relaxed afternoon."],
+    [`Guided outdoor day trip (demo listing)`, "adventure", ["adventure", "nature"], usd(140), 360, "morning", hood(3), ...at(6), 4.7, false, [], `A small-group hike, bike or boat day in the countryside around ${city}.`],
+    [`Cocktail bar crawl (demo listing)`, "nightlife", ["nightlife", "food"], usd(110), 180, "evening", hood(2), ...at(7), 4.5, false, [], "Three of the best bars in town with a guide who knows the bartenders."],
+    [`Family highlights tour (demo listing)`, "event", ["family", "culture"], usd(60), 180, "afternoon", hood(0), ...at(8), 4.5, false, [], "A kid-friendly loop of the city's must-sees, at a gentle pace."],
+  ];
+}
+
 /* ───────────────────────────── Builders ───────────────────────────── */
 
 
 /** Detect a known destination mentioned anywhere in free text. */
 
 export function buildHotels(destinationId: string, seasonFactor: number, fetchedAt: string): HotelOffer[] {
-  return (HOTELS[destinationId] ?? []).map((h, i) => {
+  return (HOTELS[destinationId] ?? templateHotels(destinationId)).map((h, i) => {
     const [name, tier, stars, neighborhood, lat, lng, nightlyUSD, chain, programs, awardPts, breakfast, resortFeeUSD, hue, description, extraTags = []] = h;
     const amenities = [
       tier === "luxury" ? "Spa" : "Fitness center",
@@ -401,13 +485,13 @@ export function buildHotels(destinationId: string, seasonFactor: number, fetched
       amenities,
       tags: [...extraTags, ...programs.map((p) => (p === "amex_fhr" ? "fhr" : p === "amex_thc" ? "thc" : "the_edit"))],
       hue,
-      bookingUrl: googleHotelsUrl(name, destinationId.replace("-", " ")),
+      bookingUrl: googleHotelsUrl(name, destinationById(destinationId)?.name ?? destinationId.replace("-", " ")),
     };
   });
 }
 
 export function buildExperiences(destinationId: string): ExperienceOffer[] {
-  return (EXPERIENCES[destinationId] ?? []).map((e, i) => {
+  return (EXPERIENCES[destinationId] ?? templateExperiences(destinationId)).map((e, i) => {
     const [name, category, styles, priceUSD, durationMin, bestTime, neighborhood, lat, lng, rating, premium, tags, description] = e;
     return {
       id: `demo-exp-${destinationId}-${i}`,
@@ -427,7 +511,7 @@ export function buildExperiences(destinationId: string): ExperienceOffer[] {
       rating,
       premium,
       tags,
-      bookingUrl: `https://www.google.com/search?q=${encodeURIComponent(name.replace(" (demo listing)", "") + " " + destinationId.replace("-", " "))}`,
+      bookingUrl: `https://www.google.com/search?q=${encodeURIComponent(name.replace(" (demo listing)", "") + " " + (destinationById(destinationId)?.name ?? destinationId.replace("-", " ")))}`,
     };
   });
 }

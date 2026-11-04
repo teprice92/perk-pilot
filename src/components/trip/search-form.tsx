@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-client";
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarDays, Loader2, MapPin, Minus, PlaneTakeoff, Plus, Route, Sparkles, Users, X } from "lucide-react";
+import { Loader2, MapPin, Minus, PlaneTakeoff, Plus, Route, Sparkles, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { Cabin, TravelStyle, TripStop } from "@/lib/domain/types";
@@ -12,7 +12,8 @@ import type { OptimizationResult } from "@/lib/optimizer/types";
 import { useApp } from "@/lib/store/app-store";
 import { addDaysISO, cn, todayISO } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Label, Select } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import { DateRangePicker } from "@/components/ui/date-range";
 import { Segmented } from "@/components/ui/misc";
 import { toast } from "@/components/ui/toast";
 
@@ -46,6 +47,7 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   const addTrip = useApp((s) => s.addTrip);
   const listId = useId();
 
+  const tomorrow = addDaysISO(todayISO(), 1);
   const defaultDepart = addDaysISO(todayISO(), 60);
   const [destination, setDestination] = useState(prefill?.destination ?? "");
   const [origin, setOrigin] = useState(household.homeAirport);
@@ -68,13 +70,24 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   }, [prefill?.destination]);
   useEffect(() => {
     setOrigin(household.homeAirport);
+    setOriginText(household.homeAirport);
   }, [household.homeAirport]);
+
+  function chooseOrigin(text: string) {
+    setOriginText(text);
+    const code = text.trim().slice(0, 3).toUpperCase();
+    if (AIRPORTS[code]) return setOrigin(code);
+    const byCity = homeAirports.find(([, a]) => a.city.toLowerCase() === text.trim().toLowerCase());
+    setOrigin(byCity ? byCity[0] : code);
+  }
 
   const match = useMemo(() => findDestination(destination), [destination]);
   const multiNights = stops.reduce((a, x) => a + x.nights, 0);
   const effectiveReturn = multi ? addDaysISO(departDate, multiNights) : returnDate;
   const nights = Math.round((Date.parse(effectiveReturn) - Date.parse(departDate)) / 86_400_000);
-  const usAirports = Object.entries(AIRPORTS).filter(([, a]) => a.country === "US");
+  const homeAirports = useMemo(() => Object.entries(AIRPORTS).filter(([, a]) => ["US", "CA"].includes(a.country)).sort((a, b) => a[1].city.localeCompare(b[1].city)), []);
+  const [originText, setOriginText] = useState(household.homeAirport);
+  const originValid = Boolean(AIRPORTS[origin]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,7 +97,15 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
       return;
     }
     if (!multi && !match) {
-      setError(destination ? `We don't have demo data for “${destination}” yet. Try one of: ${DESTINATIONS.map((d) => d.name).slice(0, 6).join(", ")}…` : "Where would you like to go?");
+      setError(destination ? `We don't cover “${destination}” yet — PerkPilot plans ${DESTINATIONS.length} destinations. Start typing to see them, e.g. ${DESTINATIONS.slice(12, 17).map((d) => d.name).join(", ")}…` : "Where would you like to go?");
+      return;
+    }
+    if (!originValid) {
+      setError(`Choose a departure airport from the list (we don't have ${originText || "that one"} yet).`);
+      return;
+    }
+    if (departDate < tomorrow) {
+      setError("Choose a departure date from tomorrow onwards.");
       return;
     }
     if (nights < 1) {
@@ -121,13 +142,13 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
     }
   }
 
-  const Stepper = ({ value, set, min, label }: { value: number; set: (n: number) => void; min: number; label: string }) => (
+  const Stepper = ({ value, set, min, max = 8, label }: { value: number; set: (n: number) => void; min: number; max?: number; label: string }) => (
     <div className="flex items-center gap-2">
       <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(Math.max(min, value - 1))} className="grid size-8 place-items-center rounded-full border border-border hover:bg-muted disabled:opacity-40" disabled={value <= min}>
         <Minus className="size-3.5" />
       </button>
       <span className="w-5 text-center text-sm font-semibold tabular">{value}</span>
-      <button type="button" aria-label={`More ${label}`} onClick={() => set(Math.min(8, value + 1))} className="grid size-8 place-items-center rounded-full border border-border hover:bg-muted">
+      <button type="button" aria-label={`More ${label}`} onClick={() => set(Math.min(max, value + 1))} disabled={value >= max} className="grid size-8 place-items-center rounded-full border border-border hover:bg-muted disabled:opacity-40">
         <Plus className="size-3.5" />
       </button>
     </div>
@@ -141,14 +162,16 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle"><Route className="size-3.5" /> Cities in order</p>
             <ol className="mt-1 space-y-1.5">
               {stops.map((st, i) => (
-                <li key={i} className="flex items-center gap-2">
+                <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="w-4 text-xs text-fg-subtle tabular">{i + 1}</span>
-                  <select aria-label={`City ${i + 1}`} value={st.destinationId} onChange={(e) => setStops(stops.map((x, k) => (k === i ? { ...x, destinationId: e.target.value } : x)))} className="min-w-0 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none">
+                  <select aria-label={`City ${i + 1}`} value={st.destinationId} onChange={(e) => setStops(stops.map((x, k) => (k === i ? { ...x, destinationId: e.target.value } : x)))} className="min-w-36 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none">
                     {DESTINATIONS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                  <Stepper value={st.nights} set={(n) => setStops(stops.map((x, k) => (k === i ? { ...x, nights: Math.max(1, n) } : x)))} min={1} label={`nights in city ${i + 1}`} />
-                  <span className="text-xs text-fg-subtle">n</span>
-                  {stops.length > 2 && <button type="button" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove city ${i + 1}`} className="text-fg-subtle hover:text-danger"><X className="size-4" /></button>}
+                  <div className="flex items-center gap-2">
+                    <Stepper value={st.nights} set={(n) => setStops(stops.map((x, k) => (k === i ? { ...x, nights: Math.max(1, n) } : x)))} min={1} max={30} label={`nights in city ${i + 1}`} />
+                    <span className="w-12 whitespace-nowrap text-xs text-fg-subtle">{st.nights === 1 ? "night" : "nights"}</span>
+                    {stops.length > 2 && <button type="button" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove city ${i + 1}`} className="text-fg-subtle hover:text-danger"><X className="size-4" /></button>}
+                  </div>
                 </li>
               ))}
             </ol>
@@ -174,23 +197,21 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
               <option key={d.id} value={d.name}>{`${d.country} · ${d.tagline}`}</option>
             ))}
           </datalist>
-          <p className="h-4 text-[11px] text-fg-subtle">{match ? `${match.emoji} ${match.name}, ${match.country} · ${match.airports.join(" / ")}` : destination ? "Not in demo catalogue" : ""}</p>
+          <p className="h-4 text-[11px] text-fg-subtle">{match ? `${match.emoji} ${match.name}, ${match.country} · ${match.airports.join(" / ")}` : destination ? "Not in the catalogue yet" : ""}</p>
         </div>
         )}
-        <div className="rounded-2xl px-3 py-2 transition focus-within:bg-muted hover:bg-muted">
-          <label htmlFor="pp-depart" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
-            <CalendarDays className="size-3.5" /> Depart
-          </label>
-          <input id="pp-depart" type="date" value={departDate} min={todayISO()} onChange={(e) => { setDepartDate(e.target.value); if (e.target.value >= returnDate) setReturnDate(addDaysISO(e.target.value, 7)); }} className="mt-0.5 w-full bg-transparent text-base font-medium outline-none" required />
-          <p className="h-4 text-[11px] text-fg-subtle">{flex !== "0" ? `± ${flex} day${flex === "1" ? "" : "s"}` : "Exact dates"}</p>
-        </div>
-        <div className="rounded-2xl px-3 py-2 transition focus-within:bg-muted hover:bg-muted">
-          <label htmlFor="pp-return" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
-            <CalendarDays className="size-3.5" /> Return
-          </label>
-          <input id="pp-return" type="date" value={effectiveReturn} min={addDaysISO(departDate, 1)} onChange={(e) => setReturnDate(e.target.value)} readOnly={multi} title={multi ? "Set by the nights in each city" : undefined} className="mt-0.5 w-full bg-transparent text-base font-medium outline-none read-only:text-fg-muted" required />
-          <p className="h-4 text-[11px] text-fg-subtle">{nights > 0 ? `${nights} night${nights === 1 ? "" : "s"}` : ""}</p>
-        </div>
+        <DateRangePicker
+          className="lg:col-span-2"
+          start={departDate}
+          end={effectiveReturn}
+          min={tomorrow}
+          fixedNights={multi ? multiNights : undefined}
+          hint={flex !== "0" ? `± ${flex} day${flex === "1" ? "" : "s"}` : "Exact dates"}
+          onChange={(start, end) => {
+            setDepartDate(start);
+            if (!multi) setReturnDate(end);
+          }}
+        />
         <Button type="submit" variant="gold" size="lg" className="h-auto min-h-14 rounded-2xl px-6 lg:min-w-48" disabled={loading || !online}>
           {loading ? <Loader2 className="animate-spin" /> : <Sparkles />}
           {online ? "Optimize My Trip" : "Offline"}
@@ -198,20 +219,30 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3 pt-3">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <Users className="size-4 text-fg-subtle" />
-          <span className="text-fg-muted">Adults</span>
-          <Stepper value={adults} set={setAdults} min={1} label="adults" />
-          <span className="ml-2 text-fg-muted">Children</span>
-          <Stepper value={children} set={setChildren} min={0} label="children" />
+          <span className="inline-flex items-center gap-2"><span className="text-fg-muted">Adults</span><Stepper value={adults} set={setAdults} min={1} label="adults" /></span>
+          <span className="inline-flex items-center gap-2 sm:ml-2"><span className="text-fg-muted">Children</span><Stepper value={children} set={setChildren} min={0} label="children" /></span>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <PlaneTakeoff className="size-4 text-fg-subtle" />
-          <Select aria-label="Departure airport" value={origin} onChange={(e) => setOrigin(e.target.value)} className="h-8 w-auto rounded-full py-0 text-xs">
-            {usAirports.map(([code, a]) => (
-              <option key={code} value={code}>{code} · {a.city}</option>
+          <input
+            aria-label="Departure airport"
+            list={`${listId}-airports`}
+            value={originText}
+            onChange={(e) => chooseOrigin(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onBlur={() => originValid && setOriginText(origin)}
+            placeholder="From (city or code)"
+            autoComplete="off"
+            className={cn("h-8 w-40 rounded-full border bg-transparent px-3 text-xs font-medium outline-none focus:border-accent", originValid ? "border-border" : "border-danger")}
+          />
+          <datalist id={`${listId}-airports`}>
+            {homeAirports.map(([code, a]) => (
+              <option key={code} value={code}>{a.city}</option>
             ))}
-          </Select>
+          </datalist>
+          {originValid && <span className="hidden text-xs text-fg-subtle sm:inline">{AIRPORTS[origin]!.city}</span>}
         </div>
         <Segmented size="sm" value={flex} onChange={setFlex} options={[{ value: "0", label: "Exact" }, { value: "1", label: "±1" }, { value: "2", label: "±2" }, { value: "3", label: "±3 days" }]} />
         <button type="button" onClick={() => setMulti((v) => !v)} aria-pressed={multi} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition", multi ? "border-accent bg-accent-soft text-accent" : "border-border text-fg-muted hover:border-border-strong")}>

@@ -1,8 +1,10 @@
 import type { Destination } from "@/lib/domain/types";
+import { MORE_AIRPORTS, MORE_DESTINATIONS } from "./catalog-world";
 
 /** Destination & airport catalogue (lightweight — safe to ship to the browser). */
 
-export const DESTINATIONS: Destination[] = [
+/** Hand-curated destinations with authored demo hotels and experiences. */
+const CURATED: Destination[] = [
   { id: "tokyo", name: "Tokyo", country: "Japan", region: "Asia", aliases: ["japan", "tokyo", "shibuya", "ginza"], airports: ["HND", "NRT"], lat: 35.6762, lng: 139.6503, tagline: "Neon nights, quiet shrines", blurb: "A city of a thousand neighborhoods — sushi counters at dawn, gardens at noon, and rooftop bars long after midnight.", palette: ["#1d2b53", "#c0577a", "#f4b7a0"], emoji: "🗼", costIndex: 1.05, bestMonths: [3, 4, 5, 10, 11], neighborhoods: ["Ginza", "Shibuya", "Asakusa", "Roppongi", "Shinjuku"] },
   { id: "kyoto", name: "Kyoto", country: "Japan", region: "Asia", aliases: ["kyoto", "osaka", "kansai"], airports: ["KIX"], lat: 35.0116, lng: 135.7681, tagline: "Temples, tea and lantern-lit lanes", blurb: "Japan's ancient capital: moss gardens, kaiseki dinners and bamboo groves at first light.", palette: ["#2c3a2e", "#b5523b", "#e9c99a"], emoji: "⛩️", costIndex: 1.0, bestMonths: [3, 4, 10, 11], neighborhoods: ["Gion", "Higashiyama", "Arashiyama", "Downtown"] },
   { id: "maui", name: "Maui", country: "United States", region: "Hawaii", aliases: ["hawaii", "maui", "wailea", "kaanapali"], airports: ["OGG"], lat: 20.7984, lng: -156.3319, tagline: "Sunrise above the clouds", blurb: "Volcano summits, the Road to Hana and some of the Pacific's most beautiful beaches.", palette: ["#0e4d64", "#1d8a8a", "#f6c28b"], emoji: "🌺", costIndex: 1.25, bestMonths: [4, 5, 9, 10], neighborhoods: ["Wailea", "Kā'anapali", "Lahaina", "Upcountry"] },
@@ -17,9 +19,16 @@ export const DESTINATIONS: Destination[] = [
   { id: "reykjavik", name: "Reykjavík & South Iceland", country: "Iceland", region: "Europe", aliases: ["iceland", "reykjavik", "northern lights"], airports: ["KEF"], lat: 64.1466, lng: -21.9426, tagline: "Glaciers, lagoons and auroras", blurb: "Geothermal spas, waterfalls and — with luck — the northern lights dancing overhead.", palette: ["#14213d", "#3a6ea5", "#c7e8f3"], emoji: "🌌", costIndex: 1.3, bestMonths: [2, 3, 6, 7, 8, 9], neighborhoods: ["Downtown", "Golden Circle", "South Coast"] },
 ];
 
+/** Every destination PerkPilot can plan; the curated twelve come first. */
+export const DESTINATIONS: Destination[] = [...CURATED, ...MORE_DESTINATIONS];
+export const FEATURED_DESTINATIONS: Destination[] = CURATED;
+export function isCurated(id: string): boolean {
+  return CURATED.some((d) => d.id === id);
+}
+
 /* Airports */
 
-export const AIRPORTS: Record<string, { city: string; lat: number; lng: number; country: string }> = {
+const BASE_AIRPORTS: Record<string, { city: string; lat: number; lng: number; country: string; tz?: number }> = {
   SFO: { city: "San Francisco", lat: 37.6213, lng: -122.379, country: "US" },
   LAX: { city: "Los Angeles", lat: 33.9416, lng: -118.4085, country: "US" },
   SEA: { city: "Seattle", lat: 47.4502, lng: -122.3088, country: "US" },
@@ -62,6 +71,8 @@ export const AIRPORTS: Record<string, { city: string; lat: number; lng: number; 
 };
 
 
+export const AIRPORTS: Record<string, { city: string; lat: number; lng: number; country: string; tz?: number }> = { ...BASE_AIRPORTS, ...MORE_AIRPORTS };
+
 export function destinationById(id: string): Destination | undefined {
   return DESTINATIONS.find((d) => d.id === id);
 }
@@ -90,12 +101,15 @@ export function detectDestinationInText(text: string): Destination | undefined {
   return undefined;
 }
 
+/** Country/region aliases too broad to count as naming a stop in free text. */
+const BROAD_ALIASES = new Set(["japan", "italy", "france", "mexico", "hawaii", "portugal", "uk", "england", "indonesia", "iceland", "spain", "greece", "netherlands", "holland", "ireland", "scotland", "switzerland", "czech", "czechia", "austria", "turkey", "morocco", "uae", "emirates", "thailand", "korea", "south korea", "australia", "new zealand", "peru", "argentina", "brazil", "costa rica", "canada", "south africa", "french polynesia", "puerto rico", "jamaica", "colorado", "utah", "arizona", "wyoming", "british columbia", "quebec", "québec", "catalonia", "tuscany", "maldives", "wine country", "pacific northwest", "new england", "lowcountry"]);
+
 /** All catalogue destinations mentioned in text, in the order they appear. */
 export function detectAllDestinationsInText(text: string): Destination[] {
   const t = ` ${text.toLowerCase()} `;
   const hits: Array<{ d: Destination; at: number }> = [];
   for (const d of DESTINATIONS) {
-    const keys = [d.name.toLowerCase(), ...d.aliases.filter((a) => a.length > 3 && !["japan", "italy", "france", "mexico", "hawaii", "portugal", "uk", "england", "indonesia", "iceland"].includes(a))];
+    const keys = [d.name.toLowerCase(), ...d.aliases.filter((a) => a.length > 3 && a !== d.country.toLowerCase() && !BROAD_ALIASES.has(a))];
     const at = Math.min(...keys.map((k) => { const m = t.match(new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`)); return m?.index ?? Infinity; }));
     if (Number.isFinite(at)) hits.push({ d, at });
   }
