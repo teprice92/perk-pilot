@@ -1,3 +1,5 @@
+import { requireUser } from "@/lib/server/auth/guard";
+import { errorResponse } from "@/lib/server/request";
 import { destinationById } from "@/lib/providers/demo/catalog";
 import { searchDestinationPhoto } from "@/lib/providers/live/unsplash";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
@@ -6,6 +8,11 @@ export const runtime = "nodejs";
 
 /** Destination photo with required attribution, or 204 when not configured. */
 export async function GET(req: Request) {
+  try {
+    await requireUser(req);
+  } catch (e) {
+    return errorResponse(e);
+  }
   const rl = rateLimit(clientKey(req, "images"), 120);
   if (!rl.ok) return tooMany(rl.resetAt);
   const id = new URL(req.url).searchParams.get("destination") ?? "";

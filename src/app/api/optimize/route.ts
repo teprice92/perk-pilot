@@ -3,6 +3,7 @@ import { optimizeTrip } from "@/lib/optimizer/engine";
 import { RulesRepository } from "@/lib/rules/repository";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
 import { assertSameOrigin, errorResponse, HttpError, readJson } from "@/lib/server/request";
+import { requireUser } from "@/lib/server/auth/guard";
 import { loadRules } from "@/lib/server/rules-db";
 
 export const runtime = "nodejs";
@@ -12,6 +13,7 @@ const MAX_BODY = 256 * 1024;
 export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
+    await requireUser(req);
     const rl = rateLimit(clientKey(req, "optimize"));
     if (!rl.ok) return tooMany(rl.resetAt);
     const parsed = OptimizeBodySchema.safeParse(await readJson(req, MAX_BODY));

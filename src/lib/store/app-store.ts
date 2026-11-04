@@ -36,6 +36,12 @@ interface AppState {
   trips: SavedTrip[];
   settings: Settings;
   lastSyncedAt?: string;
+  /** Household sync bookkeeping (logins mode). */
+  sync: { accountId?: string; version?: string | null; lastSyncedAt?: string; pending?: boolean; error?: string };
+  setSync: (patch: Partial<AppState["sync"]>) => void;
+  /** Wipe this device's household data (used when a different account signs in, or on sign-out). */
+  resetLocalData: () => void;
+  applySnapshot: (data: { household: Household; usage: BenefitUsage[]; overrides: BenefitOverride[]; trips: SavedTrip[] }) => void;
 
   setHydrated: () => void;
   setHousehold: (h: Household) => void;
@@ -73,6 +79,10 @@ export const useApp = create<AppState>()(
       overrides: [],
       trips: [],
       settings: { theme: "system", notifications: false, reminderDays: 14, dismissedDemoBanner: false },
+      sync: {},
+      setSync: (patch) => set((s) => ({ sync: { ...s.sync, ...patch } })),
+      resetLocalData: () => set({ household: blankHousehold(), usage: [], overrides: [], trips: [], sync: {} }),
+      applySnapshot: (data) => set({ household: data.household, usage: data.usage, overrides: data.overrides, trips: data.trips.map((t) => ({ ...t, result: normalizeResult(t.result) })) }),
 
       setHydrated: () => set({ hydrated: true }),
       setHousehold: (household) => set({ household }),
@@ -199,7 +209,7 @@ export const useApp = create<AppState>()(
         return state as never;
       },
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ household: s.household, usage: s.usage, overrides: s.overrides, trips: s.trips, settings: s.settings, lastSyncedAt: s.lastSyncedAt }),
+      partialize: (s) => ({ household: s.household, usage: s.usage, overrides: s.overrides, trips: s.trips, settings: s.settings, lastSyncedAt: s.lastSyncedAt, sync: s.sync }),
       onRehydrateStorage: () => (state) => state?.setHydrated(),
     },
   ),

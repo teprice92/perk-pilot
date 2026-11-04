@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { AnimatePresence, motion } from "motion/react";
 import { Bookmark, BookmarkCheck, CalendarRange, Download, FlaskConical, Loader2, Pencil, Printer, RefreshCw, Trash2, Users } from "lucide-react";
 import Link from "next/link";
@@ -72,7 +73,7 @@ export function TripView({ trip, initialTab = "overview" }: { trip: SavedTrip; i
   );
 
   const runOptimize = async (request: OptimizationResult["request"]) => {
-    const res = await fetch("/api/optimize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request, household, usage, overrides }) });
+    const res = await apiFetch("/api/optimize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request, household, usage, overrides }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.issues?.[0]?.message ?? data.error ?? "Optimization failed");
     return data as OptimizationResult;

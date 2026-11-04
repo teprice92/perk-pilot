@@ -32,10 +32,16 @@ Hard rules:
 Style: short paragraphs and tight bullet lists in Markdown. Lead with the recommendation, then the why, then the trade-offs between the three strategies (Maximum Savings, Balanced Value, Maximum Luxury). End with one clear next step.${tripContext ? `\n\nThe user is looking at this saved trip:\n${tripContext}` : ""}`;
 }
 
-export async function runConcierge(history: ChatTurn[], ctx: ToolContext, tripContext?: string, opts: { allowLlm?: boolean } = {}): Promise<{ text: string; mode: "llm" | "deterministic"; model?: string }> {
+export async function runConcierge(history: ChatTurn[], ctx: ToolContext, tripContext?: string, opts: { allowLlm?: boolean; denyReason?: "not_enabled" | "user_limit" } = {}): Promise<{ text: string; mode: "llm" | "deterministic"; model?: string }> {
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   if (!process.env.ANTHROPIC_API_KEY || opts.allowLlm === false) {
-    const note = process.env.ANTHROPIC_API_KEY ? "\n\n_(The AI concierge's daily usage limit was reached, so this answer used deterministic mode.)_" : "";
+    const note = !process.env.ANTHROPIC_API_KEY
+      ? ""
+      : opts.denyReason === "not_enabled"
+        ? "\n\n_(The AI concierge isn't enabled for your account, so this answer used PerkPilot's free deterministic mode. The account owner can turn AI on for you.)_"
+        : opts.denyReason === "user_limit"
+          ? "\n\n_(You've reached today's AI concierge allowance, so this answer used deterministic mode. It resets at midnight UTC.)_"
+          : "\n\n_(The AI concierge's daily usage limit was reached, so this answer used deterministic mode.)_";
     return { text: (await fallbackConcierge(lastUser, ctx)) + note, mode: "deterministic" };
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { safeHref } from "@/lib/safe-url";
 import { CheckCircle2, CircleDashed, CloudDownload, CloudUpload, Download, ExternalLink, KeyRound, Monitor, Moon, RefreshCw, Sun, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -28,7 +29,7 @@ export default function SettingsPage() {
   const rules = useRules();
   const [status, setStatus] = useState<Status | null>(null);
   useEffect(() => {
-    fetch("/api/providers").then((r) => r.json()).then(setStatus).catch(() => {});
+    apiFetch("/api/providers").then((r) => r.json()).then(setStatus).catch(() => {});
   }, []);
   const prefs = household.preferences;
   const setPrefs = (patch: Partial<typeof prefs>) => update({ preferences: { ...prefs, ...patch } });
@@ -111,7 +112,7 @@ export default function SettingsPage() {
             </div>
           </Section>
 
-          <DataSection syncConfigured={status?.sync.configured ?? false} />
+          <DataSection syncConfigured={status?.sync.configured ?? false} automatic={Boolean((status?.sync as { automatic?: boolean } | undefined)?.automatic)} />
         </div>
 
         <div className="space-y-6">
@@ -145,7 +146,7 @@ export default function SettingsPage() {
   );
 }
 
-function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
+function DataSection({ syncConfigured, automatic }: { syncConfigured: boolean; automatic: boolean }) {
   const state = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [token, setToken] = useState("");
@@ -179,7 +180,7 @@ function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
     setBusy(true);
     try {
       localStorage.setItem("pp-sync-token", token);
-      const res = await fetch("/api/sync", { method: dir === "push" ? "PUT" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: dir === "push" ? JSON.stringify(snapshot()) : undefined });
+      const res = await apiFetch("/api/sync", { method: dir === "push" ? "PUT" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: dir === "push" ? JSON.stringify(snapshot()) : undefined });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
       if (dir === "pull") {
@@ -202,6 +203,12 @@ function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
         <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload /> Import backup</Button>
         <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importAll(e.target.files[0])} />
       </div>
+      {automatic ? (
+        <div className="mt-5 rounded-2xl border border-border p-4 text-sm">
+          <p className="flex items-center gap-2 font-medium"><RefreshCw className="size-4 text-[color:var(--gold)]" /> Household sync is automatic</p>
+          <p className="mt-1 text-xs text-fg-muted">Signed-in members of your household share wallet, benefits and saved trips. {state.sync.error ? <span className="text-warning">{state.sync.error}</span> : state.sync.lastSyncedAt ? `Last synced ${new Date(state.sync.lastSyncedAt).toLocaleString()}.` : "Waiting for the first sync."}</p>
+        </div>
+      ) : (
       <div className="mt-5 rounded-2xl border border-border p-4">
         <p className="flex items-center gap-2 text-sm font-medium"><KeyRound className="size-4 text-[color:var(--gold)]" /> Household sync {syncConfigured ? <Badge variant="success">Available</Badge> : <Badge>Not configured on server</Badge>}</p>
         <p className="mt-1 text-xs text-fg-muted">Self-hosted deployments can set <code className="rounded bg-muted px-1">PERKPILOT_SYNC_TOKEN</code> and <code className="rounded bg-muted px-1">DATABASE_URL</code>. Enter the same token on both devices.</p>
@@ -211,6 +218,7 @@ function DataSection({ syncConfigured }: { syncConfigured: boolean }) {
           <Button variant="outline" disabled={!syncConfigured || !token || busy} onClick={() => sync("pull")}>{busy ? <RefreshCw className="animate-spin" /> : <CloudDownload />} Pull</Button>
         </div>
       </div>
+      )}
     </Section>
   );
 }

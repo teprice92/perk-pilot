@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import type { ImageResult } from "@/lib/providers/types";
 
@@ -14,7 +15,7 @@ export function useDestinationPhoto(destinationId: string): ImageResult | null {
       return;
     }
     let alive = true;
-    fetch(`/api/images?destination=${encodeURIComponent(destinationId)}`)
+    apiFetch(`/api/images?destination=${encodeURIComponent(destinationId)}`)
       .then((r) => (r.status === 200 ? (r.json() as Promise<ImageResult>) : null))
       .then((p) => {
         cache.set(destinationId, p);

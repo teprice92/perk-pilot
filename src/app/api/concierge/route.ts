@@ -4,6 +4,8 @@ import { BenefitOverrideSchema, BenefitUsageSchema, HouseholdSchema } from "@/li
 import { RulesRepository } from "@/lib/rules/repository";
 import { clientKey, consumeDailyBudget, rateLimit, tooMany } from "@/lib/server/rate-limit";
 import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/request";
+import { aiAccess, recordAiUse } from "@/lib/server/auth/ai";
+import { requireUser } from "@/lib/server/auth/guard";
 import { loadRules } from "@/lib/server/rules-db";
 
 export const runtime = "nodejs";
@@ -24,6 +26,7 @@ const DAILY_LLM_LIMIT = Math.max(0, Number(process.env.CONCIERGE_DAILY_LIMIT ?? 
 export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
+    const user = await requireUser(req);
     const rl = rateLimit(clientKey(req, "concierge"), Math.max(5, Math.floor(Number(process.env.RATE_LIMIT_PER_MINUTE ?? 30) / 2)));
     if (!rl.ok) return tooMany(rl.resetAt);
     const parsed = Body.safeParse(await readJson(req, MAX_BODY));
@@ -33,10 +36,15 @@ export async function POST(req: Request) {
     const today = new Date().toISOString().slice(0, 10);
     const rules = new RulesRepository(await loadRules(), today, overrides);
     const ctx = { household, usage, rules, today, results: [] };
-    // Over the daily ceiling, answer in deterministic mode instead of calling the LLM.
-    const allowLlm = Boolean(process.env.ANTHROPIC_API_KEY) && consumeDailyBudget("concierge-llm", DAILY_LLM_LIMIT);
-    const out = await runConcierge(messages, ctx, tripContext, { allowLlm });
-    return Response.json({ ...out, trips: ctx.results }, { headers: { "Cache-Control": "no-store" } });
+    // Paid LLM calls require: an API key, a user the owner has enabled for AI
+    // (when logins are on), the user's daily allowance, and the instance-wide ceiling.
+    // Otherwise the concierge answers in deterministic mode at no cost.
+    const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+    const access = hasKey ? await aiAccess(user) : { allowed: false as const };
+    const allowLlm = hasKey && access.allowed && consumeDailyBudget("concierge-llm", DAILY_LLM_LIMIT);
+    const out = await runConcierge(messages, ctx, tripContext, { allowLlm, denyReason: hasKey && !access.allowed ? access.reason : undefined });
+    if (out.mode === "llm") await recordAiUse(user);
+    return Response.json({ ...out, aiReason: hasKey && !access.allowed ? access.reason : undefined, trips: ctx.results }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return errorResponse(e, "The concierge is unavailable right now");
   }

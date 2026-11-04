@@ -1,16 +1,27 @@
 /* PerkPilot service worker — offline access to saved trips and the app shell.
  * Household data and trips live in IndexedDB; this worker caches the code and
  * pages needed to render them without a network connection. */
-const VERSION = "pp-v2";
+const VERSION = "pp-v3";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const TILES = `${VERSION}-tiles`;
-const PAGES = ["/", "/trips", "/trip", "/wallet", "/benefits", "/settings", "/concierge", "/offline"];
+const PAGES = ["/", "/trips", "/trip", "/wallet", "/benefits", "/settings", "/concierge", "/account", "/offline"];
 const ASSETS = ["/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL).then((cache) => Promise.allSettled([...PAGES, ...ASSETS].map((u) => cache.add(new Request(u, { cache: "reload" }))))).then(() => self.skipWaiting()),
+    caches
+      .open(SHELL)
+      .then((cache) =>
+        Promise.allSettled(
+          [...PAGES, ...ASSETS].map(async (u) => {
+            const res = await fetch(new Request(u, { cache: "reload", credentials: "same-origin" }));
+            // With logins on, signed-out precache requests redirect to /login — never store those as app pages.
+            if (res.ok && !res.redirected) await cache.put(u, res);
+          }),
+        ),
+      )
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -93,7 +104,7 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const res = await fetch(req);
-          if (res.ok) {
+          if (res.ok && !res.redirected && !["/login", "/signup"].includes(url.pathname)) {
             const cache = await caches.open(SHELL);
             cache.put(url.pathname, res.clone());
           }

@@ -19,6 +19,9 @@ PerkPilot stores household rewards data on the user's device (IndexedDB). The se
 | Malicious backup or sync files | Imports and sync pulls are validated with Zod (`DataImportSchema`) and normalized before they reach app state. The server validates sync snapshots with the same schema. |
 | Unauthorized admin or sync access | Bearer tokens (at least 32 characters) compared in constant time, rate limited, and active only when configured. Database errors are not echoed to clients. |
 | Prompt injection via provider content | The concierge's tools are read-only calculations and lookups. The model cannot transfer points, book, or send data anywhere, and the system prompt forbids inventing prices or benefits. |
+| Unauthorized use of the app | Opt-in passkey accounts (`PERKPILOT_AUTH=passkey`), invite-only by default. Sessions are random tokens in signed HttpOnly cookies; only their hashes are stored. Every API route validates the session against the database; the page proxy only checks the signature. Misconfiguration fails closed. |
+| Paying for other people's AI | The owner enables AI per user. Enabled users have a daily allowance and an instance-wide ceiling on top. Everyone else gets the free deterministic planner. |
+| Account takeover | No passwords to phish or stuff. Passkeys are origin-bound and stored as public keys. Single-use, 5-minute challenges. The setup code works only while no owner exists. Invite codes are single use, expiring and stored hashed. Auth endpoints are rate limited. |
 | Credential collection | PerkPilot never asks for card numbers or passwords, and stores only the last 4 characters of loyalty member numbers. |
 | Clickjacking / transport | `frame-ancestors 'none'`, `X-Frame-Options: DENY`, HSTS in production, `nosniff`, a strict referrer policy and COOP. |
 
@@ -26,5 +29,6 @@ PerkPilot stores household rewards data on the user's device (IndexedDB). The se
 
 - Rate limits and the daily LLM ceiling are **per instance** and in memory. On multi-instance or serverless deployments, use a shared store (Redis or Upstash) and set a spend limit in the Anthropic Console as a hard backstop.
 - `script-src` allows `'unsafe-inline'` because of Next.js's inline bootstrap. Moving to nonce-based CSP requires dynamic rendering through `proxy.ts`.
-- The household sync token is kept in the browser's localStorage. Anyone with access to the device profile can read it. Use sync only on trusted devices.
-- There is no multi-user authentication yet. Don't put real personal data on a publicly shared deployment without adding it (see docs/ARCHITECTURE.md → Authentication).
+- Without logins (`PERKPILOT_AUTH` unset), anyone with the URL can use the app. For legacy token sync, the token is kept in localStorage. Turn on passkey accounts for any deployment reachable from the internet.
+- Household data is synced as one snapshot per household, last-writer-wins with conflict merging. Simultaneous edits to the same field on two devices keep the later save.
+- Owner recovery after losing every passkey requires database access (see docs/DEPLOYMENT.md).

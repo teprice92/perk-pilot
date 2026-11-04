@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Bot, Compass, Loader2, RotateCcw, Sparkles, WifiOff } from "lucide-react";
 import Link from "next/link";
@@ -47,6 +48,7 @@ function ConciergeInner() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<string | null>(null);
+  const [aiReason, setAiReason] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const sentInitial = useRef(false);
   const tripContext = useMemo(() => (trip ? tripContextText(trip) : undefined), [trip]);
@@ -58,7 +60,7 @@ function ConciergeInner() {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch("/api/concierge", {
+      const res = await apiFetch("/api/concierge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })), household, usage, overrides, tripContext }),
@@ -66,6 +68,7 @@ function ConciergeInner() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "The concierge is unavailable");
       setMode(data.mode);
+      setAiReason(data.aiReason ?? null);
       setMessages([...next, { role: "assistant", content: data.text, trips: data.trips, mode: data.mode }]);
     } catch (e) {
       setMessages([...next, { role: "assistant", content: `Sorry — ${e instanceof Error ? e.message : "something went wrong"}. Please try again.` }]);
@@ -100,7 +103,7 @@ function ConciergeInner() {
           <h1 className="font-display text-3xl">Ask PerkPilot</h1>
         </div>
         <div className="flex items-center gap-2">
-          {mode && <Badge variant={mode === "llm" ? "accent" : "warning"}>{mode === "llm" ? "AI + verified tools" : "Deterministic mode"}</Badge>}
+          {mode && <Badge variant={mode === "llm" ? "accent" : "warning"} title={aiReason === "not_enabled" ? "The account owner hasn't enabled the AI model for your account" : undefined}>{mode === "llm" ? "AI + verified tools" : aiReason === "not_enabled" ? "Free planner mode" : aiReason === "user_limit" ? "Daily AI limit reached" : "Deterministic mode"}</Badge>}
           {messages.length > 0 && <Button size="sm" variant="ghost" onClick={() => setMessages([])}><RotateCcw /> New chat</Button>}
         </div>
       </div>

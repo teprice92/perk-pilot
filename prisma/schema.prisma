@@ -38,11 +38,91 @@ enum CardRole {
 // ───────────────────────────── Accounts ─────────────────────────────
 
 model User {
-  id         String      @id @default(cuid())
-  email      String      @unique
-  name       String?
-  createdAt  DateTime    @default(now())
-  households Household[]
+  id          String      @id @default(cuid())
+  /// Optional contact/label; sign-in is by passkey only.
+  email       String?     @unique
+  name        String
+  /// "owner" manages users, invites and AI access; "member" uses the app.
+  role        String      @default("member")
+  /// Whether this user's concierge requests may call the paid LLM.
+  aiEnabled   Boolean     @default(false)
+  disabled    Boolean     @default(false)
+  householdId String?
+  household   Household?  @relation("HouseholdMembers", fields: [householdId], references: [id])
+  households  Household[]
+  passkeys    Passkey[]
+  sessions    Session[]
+  aiUsage     AiUsage[]
+  invites     Invite[]    @relation("InviteCreator")
+  createdAt   DateTime    @default(now())
+  lastLoginAt DateTime?
+}
+
+/// WebAuthn credential (passkey). Only the public key is stored.
+model Passkey {
+  /// Credential ID (base64url)
+  id         String    @id
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey  Bytes
+  counter    Int       @default(0)
+  transports String[]
+  deviceType String
+  backedUp   Boolean   @default(false)
+  name       String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+/// Server-side session. `id` is the SHA-256 of the cookie token, never the token itself.
+model Session {
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  @@index([userId])
+}
+
+/// Single-use WebAuthn challenge (deleted when consumed or expired).
+model AuthChallenge {
+  id        String   @id
+  challenge String
+  purpose   String
+  data      Json
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// Invitation to create an account. Only the SHA-256 of the code is stored.
+model Invite {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  createdById   String
+  createdBy     User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  note          String?
+  aiEnabled     Boolean   @default(false)
+  joinHousehold Boolean   @default(false)
+  expiresAt     DateTime
+  usedAt        DateTime?
+  usedById      String?
+  createdAt     DateTime  @default(now())
+}
+
+/// LLM concierge calls per user per UTC day.
+model AiUsage {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    String
+  count  Int    @default(0)
+
+  @@id([userId, day])
 }
 
 model Household {
@@ -56,6 +136,7 @@ model Household {
   cashBudgetCents  Int              @default(0)
   ownerId          String?
   owner            User?            @relation(fields: [ownerId], references: [id])
+  members          User[]           @relation("HouseholdMembers")
   travelers        Traveler[]
   usage            BenefitUsage[]
   overrides        BenefitOverride[]

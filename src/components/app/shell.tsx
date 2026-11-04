@@ -8,6 +8,8 @@ import { useOnline } from "@/lib/hooks/use-online";
 import { useApp } from "@/lib/store/app-store";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toast";
+import { useAuth } from "@/lib/store/auth-store";
+import { AuthAndSync } from "./auth-sync";
 import { Logo } from "./logo";
 
 const NAV = [
@@ -66,14 +68,39 @@ function ThemeSync() {
   return null;
 }
 
+function AccountChip() {
+  const user = useAuth((s) => s.user);
+  if (!user) return null;
+  const initials = user.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <Link href="/account" className="ml-1 grid size-9 place-items-center rounded-full bg-navy text-xs font-semibold text-champagne ring-2 ring-[color-mix(in_oklab,var(--gold)_40%,transparent)]" aria-label={`Account: ${user.name}`} title={user.role === "owner" ? `${user.name} · owner` : user.name}>
+      {initials || "?"}
+    </Link>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const online = useOnline();
+  const authPage = pathname.startsWith("/login") || pathname.startsWith("/signup");
+  if (authPage) {
+    return (
+      <div className="min-h-dvh">
+        <AuthAndSync />
+        <header className="mx-auto flex h-16 max-w-7xl items-center px-4 sm:px-6">
+          <Logo />
+        </header>
+        <main id="main">{children}</main>
+        <Toaster />
+      </div>
+    );
+  }
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href) || (href === "/trips" && pathname.startsWith("/trip")));
   return (
     <div className="min-h-dvh">
       <ServiceWorker />
       <ThemeSync />
+      <AuthAndSync />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded-full focus:bg-elevated focus:px-4 focus:py-2">
         Skip to content
       </a>
@@ -109,6 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/settings" className="grid size-9 place-items-center rounded-full text-fg-muted transition hover:bg-muted hover:text-fg" aria-label="Settings & integrations">
               <Settings className="size-[18px]" />
             </Link>
+            <AccountChip />
           </div>
         </div>
       </header>

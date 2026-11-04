@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { AnimatePresence, motion } from "motion/react";
 import { CalendarDays, Loader2, MapPin, Minus, PlaneTakeoff, Plus, Route, Sparkles, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -94,7 +95,7 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
     setStep(0);
     const timer = setInterval(() => setStep((s) => Math.min(PROGRESS.length - 1, s + 1)), 650);
     try {
-      const res = await fetch("/api/optimize", {
+      const res = await apiFetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

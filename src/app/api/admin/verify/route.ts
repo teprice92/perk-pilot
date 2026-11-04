@@ -6,6 +6,8 @@ import { getDb } from "@/lib/server/db";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
 import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/request";
 import { loadRules } from "@/lib/server/rules-db";
+import { authEnabled } from "@/lib/server/auth/config";
+import { getSessionUser } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 
@@ -32,6 +34,13 @@ const Body = z.object({
   amountCents: z.number().int().min(0).max(10_000_000).optional(),
 });
 
+/** Admin token, or the signed-in owner when logins are enabled. */
+async function allowed(req: Request): Promise<boolean> {
+  if (authorized(req)) return true;
+  if (!authEnabled() || !getDb()) return false;
+  return (await getSessionUser(req).catch(() => null))?.role === "owner";
+}
+
 function authorized(req: Request): boolean {
   const expected = process.env.PERKPILOT_ADMIN_TOKEN;
   const got = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
@@ -44,7 +53,7 @@ function authorized(req: Request): boolean {
 export async function GET(req: Request) {
   const rl = rateLimit(clientKey(req, "admin"), 30);
   if (!rl.ok) return tooMany(rl.resetAt);
-  if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await allowed(req))) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const rules = await loadRules();
   const today = new Date().toISOString().slice(0, 10);
   const pick = (type: string, list: Array<{ id: string; verification: string; lastVerified?: string | null; sourceUrl?: string }>) =>
@@ -65,7 +74,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const rl = rateLimit(clientKey(req, "admin"), 60);
   if (!rl.ok) return tooMany(rl.resetAt);
-  if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await allowed(req))) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const db = getDb();
   if (!db) return Response.json({ error: "DATABASE_URL is required for verification" }, { status: 501 });
   let raw: unknown;

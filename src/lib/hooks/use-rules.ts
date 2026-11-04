@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useMemo, useState } from "react";
 import type { RulesDataset } from "@/lib/domain/types";
 import { RulesRepository } from "@/lib/rules/repository";
@@ -16,7 +17,7 @@ export function useRules(): RulesRepository {
   useEffect(() => {
     if (cached) return;
     let alive = true;
-    fetch("/api/rules")
+    apiFetch("/api/rules")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: RulesDataset | null) => {
         if (alive && d?.version) {

@@ -77,9 +77,14 @@
 
 ## Authentication
 
-Phase 1 is local-first and needs no account. For a two-person household on a self-hosted deployment, `/api/sync` stores a validated snapshot protected by `PERKPILOT_SYNC_TOKEN` (constant-time comparison, rate limited).
+Logins are opt-in (`PERKPILOT_AUTH=passkey`). Without them the app is local-first and needs no account.
 
-For multi-household deployments, replace the token with real authentication, for example Auth.js with email magic links or passkeys. Scope `Household.ownerId` to the session user, and move `/api/sync` to per-household rows (`Traveler`, `PointsBalance`, `BenefitUsage`, `Trip`). The Prisma schema already contains those tables.
+- **Passkeys only.** WebAuthn through `@simplewebauthn`. Sign-in uses discoverable credentials, so there is no username or password. Only public keys are stored (`Passkey`). Challenges are single use (`AuthChallenge`, deleted on read, 5-minute TTL) and referenced by a signed cookie.
+- **Sessions.** A random 256-bit token sits in an HttpOnly, SameSite=Lax, Secure (on HTTPS) cookie signed with `AUTH_SECRET`. The database stores only its SHA-256. Sessions last 30 days with sliding renewal and are revoked on sign-out, "sign out everywhere", or when the owner disables the user.
+- **Who can join.** The first account needs `PERKPILOT_SETUP_CODE` and becomes the owner; a transaction prevents a second owner. After that, people join through one-time invites (only the code's hash is stored), or through open sign-up if enabled.
+- **Gating.** `src/proxy.ts` redirects pages without a validly signed cookie to `/login` (a cheap check). Every API route calls `requireUser()`/`requireOwner()`, which validate the session against the database. Misconfiguration fails closed (503).
+- **AI access.** The concierge calls the LLM only when the user's `aiEnabled` flag is on (set by the owner), their daily allowance (`AiUsage`, `CONCIERGE_USER_DAILY_LIMIT`) isn't used up, and the instance-wide ceiling allows it. Otherwise it answers with the free deterministic planner and says why.
+- **Households.** Users belong to a household. Invites can "share my household" (spouses). `/api/sync` reads and writes the signed-in user's household snapshot with optimistic concurrency. The client (`auth-sync.tsx`) pulls on load, focus and every minute, pushes 3 seconds after changes, and merges on conflict. Signing in as a different account on a device clears the previous account's local copy.
 
 ## Security
 
