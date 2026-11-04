@@ -1,21 +1,27 @@
 import { cn } from "@/lib/utils";
 
-/** Original PerkPilot mark: a compass star crossed by a flight path. */
+/**
+ * PerkPilot "Route P" mark: the P drawn as a flight route — a dotted takeoff
+ * trail becomes the stem, the line loops into the bowl and lands on a gold point.
+ */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={cn("size-8", className)} aria-hidden>
-      <defs>
-        <linearGradient id="pp-star" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#f0dfb8" />
-          <stop offset="1" stopColor="#b8924a" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill="#0b1426" />
-      <circle cx="16" cy="16" r="10.5" fill="none" stroke="#e9dcc2" strokeOpacity=".22" />
-      <path d="M16 4.5 18.4 13.6 27.5 16 18.4 18.4 16 27.5 13.6 18.4 4.5 16 13.6 13.6Z" fill="url(#pp-star)" />
-      <path d="M16 4.5 18.4 13.6 16 16Z" fill="#fff" opacity=".55" />
-      <path d="M6.5 23.5C11.5 19 19.5 12.5 25.8 8.4" stroke="#5fb3ae" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeDasharray="0.1 3.2" />
-      <path d="m25.8 8.4-3.3.6 1.4 1.9Z" fill="#5fb3ae" />
+    <svg viewBox="0 0 100 100" className={cn("size-8", className)} aria-hidden>
+      <rect width="100" height="100" rx="24" fill="#0b1426" />
+      <path d="M32 82V64" fill="none" stroke="#f0dfb8" strokeWidth="7" strokeLinecap="round" strokeDasharray="0.01 11" />
+      <path d="M32 60V31a9 9 0 0 1 9-9h10a17 17 0 0 1 0 34h-5" fill="none" stroke="#f0dfb8" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="42" cy="56" r="6.5" fill="#c9a35e" />
+    </svg>
+  );
+}
+
+/** One-color Route P glyph (no tile), drawn in currentColor — for watermarks and monochrome uses. */
+export function RouteGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} aria-hidden>
+      <path d="M32 82V64" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeDasharray="0.01 11" />
+      <path d="M32 60V31a9 9 0 0 1 9-9h10a17 17 0 0 1 0 34h-5" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="42" cy="56" r="6.5" fill="currentColor" />
     </svg>
   );
 }

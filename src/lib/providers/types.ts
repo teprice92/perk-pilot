@@ -1,7 +1,7 @@
 import type { Cabin, DataKind, ExperienceOffer, FlightOffer, HotelOffer, TravelStyle } from "@/lib/domain/types";
 
 /**
- * Provider adapter contracts. Every travel data source (demo, Duffel, Amadeus,
+ * Provider adapter contracts. Every travel data source (demo, Duffel,
  * Seats.aero, Google Places, Unsplash…) implements one of these so the
  * optimizer never knows or cares where data came from — only its provenance.
  */

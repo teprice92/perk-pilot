@@ -22,9 +22,8 @@ PerkPilot is a mobile-first web app that plans trips around a household's credit
 | Saved trips, available offline | ✅ |
 | AI concierge (Claude with verified tools, plus a deterministic fallback) | ✅ |
 | Installable PWA with an offline indicator | ✅ |
-| Live cash fares — Duffel or Amadeus (opt-in) | ✅ adapters + mocked tests (need your credentials) |
+| Live cash fares — Duffel (opt-in) | ✅ adapter + mocked tests (needs your credentials) |
 | Cached award availability — Seats.aero (opt-in) | ✅ adapter, merged at route/date/cabin level, labelled "seen in cached search" |
-| Live hotel rates — Amadeus (opt-in) | ✅ cash/portal options only; card-program eligibility is never guessed |
 | Live destination experiences — Google Places (opt-in) | ✅ prices labelled "estimated", Google attribution |
 | Destination photography — Unsplash (opt-in) | ✅ with photographer attribution; generative art otherwise |
 | Verified benefits workflow (admin API + audit log + 90-day staleness) | ✅ |
@@ -67,7 +66,6 @@ With no environment variables set, the app runs in **guest demo mode**: a sample
 | `DATABASE_URL` | Loading the rules database from PostgreSQL, and household sync |
 | `PERKPILOT_SYNC_TOKEN` | Syncing household data between both travelers' devices (self-hosted) |
 | `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel` | Live cash fares (Duffel) |
-| `AMADEUS_CLIENT_ID/SECRET` + `PERKPILOT_LIVE_FLIGHTS=amadeus` and/or `PERKPILOT_LIVE_HOTELS=amadeus` | Live cash fares and/or hotel rates (Amadeus) |
 | `SEATS_AERO_API_KEY` + `PERKPILOT_LIVE_AWARDS=seats-aero` | Cached award availability merged into any flight source |
 | `GOOGLE_PLACES_API_KEY` + `PERKPILOT_LIVE_EXPERIENCES=google-places` | Live destination experiences |
 | `UNSPLASH_ACCESS_KEY` | Destination photography |

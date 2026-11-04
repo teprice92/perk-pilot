@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FlightOffer } from "@/lib/domain/types";
 import { attachAwards } from "@/lib/providers/awards";
-import { amadeusFlightProvider, amadeusHotelProvider, mapAmadeusFlight, resetAmadeusToken } from "@/lib/providers/live/amadeus";
 import { mapPlace } from "@/lib/providers/live/google-places";
 import { mapSeatsAeroRow, seatsAeroProvider } from "@/lib/providers/live/seats-aero";
 import { mapUnsplash } from "@/lib/providers/live/unsplash";
@@ -57,49 +56,6 @@ describe("Seats.aero adapter & award merging", () => {
     const res = await withAwards(demoFlightProvider, failing).searchFlights({ origin: "SFO", destinationAirports: ["HND"], departDate: "2027-04-02", returnDate: "2027-04-09", adults: 2, children: 0, cabins: ["business"], flexibleDays: 0, destinationId: "tokyo" });
     expect(res.outbound.length).toBeGreaterThan(0);
     expect(res.warnings.some((w) => w.includes("Broken awards"))).toBe(true);
-  });
-});
-
-describe("Amadeus adapter", () => {
-  beforeEach(() => resetAmadeusToken());
-  const offer = {
-    id: "1",
-    itineraries: [{ duration: "PT11H5M", segments: [{ departure: { iataCode: "SFO", at: "2027-04-02T11:15:00" }, arrival: { iataCode: "HND", at: "2027-04-03T14:20:00" }, carrierCode: "NH", number: "7" }] }],
-    price: { currency: "USD", grandTotal: "2400.00" },
-    validatingAirlineCodes: ["NH"],
-    travelerPricings: [{ fareDetailsBySegment: [{ cabin: "BUSINESS" }] }],
-  };
-  it("maps flight offers (USD only, per-person price, no invented awards)", () => {
-    const f = mapAmadeusFlight(offer, "outbound", 2, "business", { NH: "ALL NIPPON AIRWAYS" }, "")!;
-    expect(f).toMatchObject({ dataKind: "live", carrier: "NH", cabin: "business", cashPerPersonCents: 120_000, durationMin: 665, arrivesNextDay: true, awards: [] });
-    expect(mapAmadeusFlight({ ...offer, price: { currency: "EUR", grandTotal: "1" } }, "outbound", 2, "business", {}, "")).toBeNull();
-  });
-  it("fetches an OAuth token once and reuses it", async () => {
-    vi.stubEnv("AMADEUS_CLIENT_ID", "id");
-    vi.stubEnv("AMADEUS_CLIENT_SECRET", "secret");
-    const fetchMock = vi.fn(async (url: URL | string) => {
-      if (String(url).includes("oauth2/token")) return Response.json({ access_token: "tok", expires_in: 1799 });
-      return Response.json({ data: [offer], dictionaries: { carriers: { NH: "ANA" } } });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const r = await amadeusFlightProvider.searchFlights({ origin: "SFO", destinationAirports: ["HND"], departDate: "2027-04-02", returnDate: "2027-04-09", adults: 2, children: 0, cabins: ["business"], flexibleDays: 0 });
-    expect(r.outbound).toHaveLength(1);
-    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("oauth2/token"))).toHaveLength(1);
-    const search = fetchMock.mock.calls.find(([u]) => String(u).includes("flight-offers"))!;
-    expect(String(search[0])).toContain("travelClass=BUSINESS");
-  });
-  it("maps hotel offers without guessing card-program participation", async () => {
-    vi.stubEnv("AMADEUS_CLIENT_ID", "id");
-    vi.stubEnv("AMADEUS_CLIENT_SECRET", "secret");
-    vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => {
-      const u = String(url);
-      if (u.includes("oauth2/token")) return Response.json({ access_token: "tok", expires_in: 1799 });
-      if (u.includes("by-geocode")) return Response.json({ data: [{ hotelId: "HYTYOPH" }] });
-      return Response.json({ data: [{ hotel: { hotelId: "HYTYOPH", name: "PARK HYATT TOKYO", latitude: 35.68, longitude: 139.69, chainCode: "HY" }, offers: [{ price: { currency: "USD", total: "4480.00", base: "4000.00" }, policies: { cancellations: [{ deadline: "2027-03-30" }] }, boardType: "ROOM_ONLY" }] }] });
-    }));
-    const hotels = await amadeusHotelProvider.searchHotels({ destinationId: "tokyo", checkIn: "2027-04-02", checkOut: "2027-04-06", guests: 2 });
-    expect(hotels[0]).toMatchObject({ name: "Park Hyatt Tokyo", chainProgramId: "hyatt", nightlyCashCents: 100_000, programs: [], refundable: true, dataKind: "live" });
-    expect(hotels[0]!.taxesPct).toBeCloseTo(0.12);
   });
 });
 

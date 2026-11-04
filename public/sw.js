@@ -1,7 +1,7 @@
 /* PerkPilot service worker — offline access to saved trips and the app shell.
  * Household data and trips live in IndexedDB; this worker caches the code and
  * pages needed to render them without a network connection. */
-const VERSION = "pp-v3";
+const VERSION = "pp-v4";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const TILES = `${VERSION}-tiles`;

@@ -12,6 +12,7 @@ import { todayISO } from "@/lib/utils";
 import { creditStatuses, householdPoints } from "@/lib/wallet";
 import { householdTips } from "@/lib/strategies/household";
 import { DestinationArt } from "@/components/app/destination-art";
+import { RouteGlyph } from "@/components/app/logo";
 import { SearchForm, type SearchPrefill } from "@/components/trip/search-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,11 +51,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="relative overflow-hidden bg-navy-deep text-[#f1ece1]">
         <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_70%_0%,rgba(61,140,136,0.35),transparent_60%),radial-gradient(60%_50%_at_10%_20%,rgba(184,146,74,0.22),transparent_60%)]" />
-        <svg className="absolute -right-24 top-10 hidden h-[520px] w-[520px] opacity-[0.07] md:block" viewBox="0 0 100 100" aria-hidden>
-          <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="0.3" />
-          <circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" strokeWidth="0.3" />
-          <path d="M50 2 55 45 98 50 55 55 50 98 45 55 2 50 45 45Z" fill="currentColor" />
-        </svg>
+        <RouteGlyph className="absolute -right-10 top-6 hidden h-[560px] w-[560px] text-champagne opacity-[0.07] md:block" />
         <div className="relative mx-auto max-w-7xl px-4 pb-28 pt-14 sm:px-6 md:pb-36 md:pt-24">
           <motion.p {...fade} transition={{ duration: 0.5 }} className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium tracking-wide text-champagne">
             <Compass className="size-3.5" /> Travel smarter. Experience more.

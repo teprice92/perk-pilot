@@ -3,7 +3,6 @@ import { PROGRAMS } from "@/lib/rules/seed";
 import { attachAwards } from "./awards";
 import { buildExperiences, buildHotels, destinationById } from "./demo/destinations";
 import { generateFlights, generateLeg } from "./demo/flights";
-import { amadeusFlightProvider, amadeusFlightsInfo, amadeusHotelProvider, amadeusHotelsInfo } from "./live/amadeus";
 import { duffelFlightProvider, duffelInfo } from "./live/duffel";
 import { googlePlacesInfo, googlePlacesProvider } from "./live/google-places";
 import { seatsAeroInfo, seatsAeroProvider } from "./live/seats-aero";
@@ -108,12 +107,13 @@ export function withAwards(cash: FlightProvider, awards: AwardProvider | null): 
 /* ───────────── Selection (opt-in live providers) ───────────── */
 
 export function getFlightProvider(): FlightProvider {
-  const cash = duffelInfo().configured ? duffelFlightProvider : amadeusFlightsInfo().configured ? amadeusFlightProvider : demoFlightProvider;
+  const cash = duffelInfo().configured ? duffelFlightProvider : demoFlightProvider;
   return withAwards(cash, seatsAeroInfo().configured ? seatsAeroProvider : null);
 }
 
 export function getHotelProvider(): HotelProvider {
-  return amadeusHotelsInfo().configured ? amadeusHotelProvider : demoHotelProvider;
+  // No live hotel provider is wired in (Amadeus Self-Service was retired in 2026).
+  return demoHotelProvider;
 }
 
 export function getExperienceProvider(): ExperienceProvider {
@@ -126,8 +126,6 @@ export function providerCatalogue(): ProviderInfo[] {
     demoHotelProvider.info(),
     demoExperienceProvider.info(),
     duffelInfo(),
-    amadeusFlightsInfo(),
-    amadeusHotelsInfo(),
     seatsAeroInfo(),
     googlePlacesInfo(),
     unsplashInfo(),
