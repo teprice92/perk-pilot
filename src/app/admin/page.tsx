@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/store/auth-store";
 import { cn, formatDate } from "@/lib/utils";
 import { PageHeader } from "@/components/app/shell";
+import { BenefitsWatcher } from "@/components/admin/benefits-watcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -189,6 +190,8 @@ export default function AdminPage() {
             )}
           </div>
         </section>
+
+        <BenefitsWatcher />
       </div>
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} title={`Delete ${confirmDelete?.name ?? ""}?`}>

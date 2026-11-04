@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Dialog, Progress, Segmented, Skeleton, Switch } from "@/components/ui/misc";
 import { toast } from "@/components/ui/toast";
+import { CardOffersView } from "@/components/benefits/card-offers";
 
 export default function BenefitsPage() {
   const rules = useRules();
@@ -27,9 +28,10 @@ export default function BenefitsPage() {
   const settings = useApp((s) => s.settings);
   const updateSettings = useApp((s) => s.updateSettings);
   const setUsage = useApp((s) => s.setUsage);
+  const offers = useApp((s) => s.offers);
   const today = todayISO();
   const [card, setCard] = useState<string>("all");
-  const [view, setView] = useState<"credits" | "perks" | "transfers" | "history">("credits");
+  const [view, setView] = useState<"credits" | "offers" | "perks" | "transfers" | "history">("credits");
   const [logFor, setLogFor] = useState<CreditStatus | null>(null);
   const [editFor, setEditFor] = useState<Benefit | null>(null);
 
@@ -47,6 +49,7 @@ export default function BenefitsPage() {
   const remaining = credits.filter((c) => c.enrolled).reduce((a, c) => a + c.remainingCents, 0);
   const expiringSoon = credits.filter((c) => c.remainingCents > 0 && c.daysLeft <= settings.reminderDays && c.benefit.period !== "every_4_years");
   const perks = rules.benefits({ date: today }).filter((b) => !b.amountCents && owned.has(b.cardId) && (card === "all" || b.cardId === card));
+  const offersExpiring = offers.filter((o) => !o.used && o.expires && o.expires >= today && Date.parse(o.expires) - Date.parse(today) <= settings.reminderDays * 86_400_000);
   const travelerName = (id: string) => household.travelers.find((t) => t.id === id)?.name ?? id;
 
   // Optional local notifications for expiring credits (once per day).
@@ -54,11 +57,12 @@ export default function BenefitsPage() {
     if (!hydrated || !settings.notifications || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
       const key = "pp-last-reminder";
-      if (localStorage.getItem(key) === today || expiringSoon.length === 0) return;
+      if (localStorage.getItem(key) === today || (expiringSoon.length === 0 && offersExpiring.length === 0)) return;
       localStorage.setItem(key, today);
-      new Notification("PerkPilot reminder", { body: `${expiringSoon.length} card credit(s) reset within ${settings.reminderDays} days. Only use them for things you'd buy anyway.`, icon: "/icons/icon-192.png" });
+      const parts = [expiringSoon.length ? `${expiringSoon.length} card credit(s) reset` : "", offersExpiring.length ? `${offersExpiring.length} card offer(s) expire` : ""].filter(Boolean).join(" and ");
+      new Notification("PerkPilot reminder", { body: `${parts} within ${settings.reminderDays} days. Only use them for things you'd buy anyway.`, icon: "/icons/icon-192.png" });
     } catch {}
-  }, [hydrated, settings.notifications, settings.reminderDays, expiringSoon.length, today]);
+  }, [hydrated, settings.notifications, settings.reminderDays, expiringSoon.length, offersExpiring.length, today]);
 
   const toggleNotifications = async (v: boolean) => {
     if (v && typeof Notification !== "undefined" && Notification.permission !== "granted") {
@@ -87,7 +91,7 @@ export default function BenefitsPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            <Segmented value={view} onChange={setView} options={[{ value: "credits", label: "Credits" }, { value: "perks", label: "Perks" }, { value: "transfers", label: "Transfers" }, { value: "history", label: "Rule history" }]} />
+            <Segmented value={view} onChange={setView} options={[{ value: "credits", label: "Credits" }, { value: "offers", label: "Offers" }, { value: "perks", label: "Perks" }, { value: "transfers", label: "Transfers" }, { value: "history", label: "Rule history" }]} />
             <Select aria-label="Filter by card" value={card} onChange={(e) => setCard(e.target.value)} className="w-auto rounded-full">
               <option value="all">All cards</option>
               {rules.cards.filter((c) => owned.has(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -197,6 +201,8 @@ export default function BenefitsPage() {
               </article>
             ))}
           </div>
+        ) : view === "offers" ? (
+          <CardOffersView cardFilter={card} />
         ) : view === "transfers" ? (
           <TransferPartners />
         ) : (
@@ -215,6 +221,7 @@ function EnrollToggle({ benefit }: { benefit: Benefit }) {
   const household = useApp((s) => s.household);
   const usage = useApp((s) => s.usage);
   const setUsage = useApp((s) => s.setUsage);
+  const offers = useApp((s) => s.offers);
   const holders = household.travelers.filter((t) => t.cards.some((c) => c.cardId === benefit.cardId && (c.role === "primary" || benefit.appliesToAuthorizedUsers)));
   return (
     <div className="mt-3 space-y-2">
@@ -233,6 +240,7 @@ function EnrollToggle({ benefit }: { benefit: Benefit }) {
 
 function LogUsageDialog({ status, onClose }: { status: CreditStatus | null; onClose: () => void }) {
   const setUsage = useApp((s) => s.setUsage);
+  const offers = useApp((s) => s.offers);
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<"add" | "set">("add");
   useEffect(() => {

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { BenefitOverride, BenefitUsage, Household, PointsBalance, Traveler } from "@/lib/domain/types";
+import type { BenefitOverride, BenefitUsage, CardOffer, Household, PointsBalance, Traveler } from "@/lib/domain/types";
 import { blankHousehold, demoHousehold, demoUsage } from "@/lib/demo/household";
 import { buildItinerary, moveItem, reoptimizeItinerary, type BookingStatus, type Itinerary } from "@/lib/itinerary";
 import { normalizeResult } from "@/lib/optimizer/compat";
@@ -33,6 +33,10 @@ interface AppState {
   household: Household;
   usage: BenefitUsage[];
   overrides: BenefitOverride[];
+  offers: CardOffer[];
+  addOffers: (offers: CardOffer[]) => void;
+  updateOffer: (id: string, patch: Partial<CardOffer>) => void;
+  removeOffer: (id: string) => void;
   trips: SavedTrip[];
   settings: Settings;
   lastSyncedAt?: string;
@@ -41,7 +45,7 @@ interface AppState {
   setSync: (patch: Partial<AppState["sync"]>) => void;
   /** Wipe this device's household data (used when a different account signs in, or on sign-out). */
   resetLocalData: () => void;
-  applySnapshot: (data: { household: Household; usage: BenefitUsage[]; overrides: BenefitOverride[]; trips: SavedTrip[] }) => void;
+  applySnapshot: (data: { household: Household; usage: BenefitUsage[]; overrides: BenefitOverride[]; offers?: CardOffer[]; trips: SavedTrip[] }) => void;
 
   setHydrated: () => void;
   setHousehold: (h: Household) => void;
@@ -65,7 +69,7 @@ interface AppState {
   updateSettings: (patch: Partial<Settings>) => void;
   loadDemo: () => void;
   startPersonal: () => void;
-  importData: (data: { household: Household; usage?: BenefitUsage[]; overrides?: BenefitOverride[]; trips?: SavedTrip[] }) => void;
+  importData: (data: { household: Household; usage?: BenefitUsage[]; overrides?: BenefitOverride[]; offers?: CardOffer[]; trips?: SavedTrip[] }) => void;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -77,12 +81,13 @@ export const useApp = create<AppState>()(
       household: demoHousehold(),
       usage: demoUsage(),
       overrides: [],
+      offers: [],
       trips: [],
       settings: { theme: "system", notifications: false, reminderDays: 14, dismissedDemoBanner: false },
       sync: {},
       setSync: (patch) => set((s) => ({ sync: { ...s.sync, ...patch } })),
-      resetLocalData: () => set({ household: blankHousehold(), usage: [], overrides: [], trips: [], sync: {} }),
-      applySnapshot: (data) => set({ household: data.household, usage: data.usage, overrides: data.overrides, trips: data.trips.map((t) => ({ ...t, result: normalizeResult(t.result) })) }),
+      resetLocalData: () => set({ household: blankHousehold(), usage: [], overrides: [], offers: [], trips: [], sync: {} }),
+      applySnapshot: (data) => set((s) => ({ household: data.household, usage: data.usage, overrides: data.overrides, offers: data.offers ?? s.offers, trips: data.trips.map((t) => ({ ...t, result: normalizeResult(t.result) })) })),
 
       setHydrated: () => set({ hydrated: true }),
       setHousehold: (household) => set({ household }),
@@ -117,6 +122,9 @@ export const useApp = create<AppState>()(
         }),
       setOverride: (o) => set((s) => ({ overrides: [...s.overrides.filter((x) => x.benefitId !== o.benefitId), o] })),
       clearOverride: (benefitId) => set((s) => ({ overrides: s.overrides.filter((x) => x.benefitId !== benefitId) })),
+      addOffers: (offers) => set((s) => ({ offers: [...s.offers, ...offers].slice(-400) })),
+      updateOffer: (id, patch) => set((s) => ({ offers: s.offers.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
+      removeOffer: (id) => set((s) => ({ offers: s.offers.filter((o) => o.id !== id) })),
       addTrip: (raw) => {
         const result = normalizeResult(raw);
         const trip: SavedTrip = {
@@ -191,12 +199,13 @@ export const useApp = create<AppState>()(
       },
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       loadDemo: () => set({ household: demoHousehold(), usage: demoUsage(), overrides: [] }),
-      startPersonal: () => set({ household: blankHousehold(), usage: [], overrides: [] }),
+      startPersonal: () => set({ household: blankHousehold(), usage: [], overrides: [], offers: [] }),
       importData: (data) =>
         set((s) => ({
           household: data.household,
           usage: data.usage ?? s.usage,
           overrides: data.overrides ?? s.overrides,
+          offers: data.offers ?? s.offers,
           trips: data.trips ? data.trips.map((t) => ({ ...t, result: normalizeResult(t.result) })) : s.trips,
         })),
     }),
@@ -209,7 +218,7 @@ export const useApp = create<AppState>()(
         return state as never;
       },
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ household: s.household, usage: s.usage, overrides: s.overrides, trips: s.trips, settings: s.settings, lastSyncedAt: s.lastSyncedAt, sync: s.sync }),
+      partialize: (s) => ({ household: s.household, usage: s.usage, overrides: s.overrides, offers: s.offers, trips: s.trips, settings: s.settings, lastSyncedAt: s.lastSyncedAt, sync: s.sync }),
       onRehydrateStorage: () => (state) => state?.setHydrated(),
     },
   ),

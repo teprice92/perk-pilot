@@ -33,6 +33,7 @@ Turn on passkey sign-in to limit who can use your deployment and whose concierge
    | `PERKPILOT_ORIGIN` | your final URL, e.g. `https://perkpilot.vercel.app` |
    | `ANTHROPIC_API_KEY` | your key (optional, for the AI concierge) |
    | `CONCIERGE_USER_DAILY_LIMIT` | AI conversations per enabled person per day (default 30) |
+   | `CRON_SECRET` | random 16+ characters — enables the weekly benefits watcher |
 3. **Redeploy**, open the site and choose **Create the owner account**. Enter your name and the setup code, then save the passkey (Face ID, Touch ID, Windows Hello or a phone). You're now the owner.
 4. **Invite people** from **Account → Manage users** (`/admin`). For your spouse, leave **Share my household** on, so you share cards, balances and saved trips, synced automatically. Turn **Enable AI concierge** on only for people whose usage you're willing to pay for. Send the one-time link privately.
 5. You can switch AI on or off per person, see each person's AI use today and this month, and disable or remove accounts at any time. People without AI still get the free built-in planner.
@@ -44,6 +45,17 @@ Notes:
 - **Owner recovery:** if the owner loses every passkey, an administrator with database access can delete that user's rows. The setup code then works again only if no owner remains.
 - `PERKPILOT_SIGNUP=open` lets anyone create an account (AI off by default). The default, `invite`, is recommended.
 - With logins on, the old shared `PERKPILOT_SYNC_TOKEN` isn't used; each person syncs the household they belong to.
+
+## Benefits watcher and card offers
+
+**Benefits watcher** (owner only, Admin page). Every Monday at 13:00 UTC a scheduled job checks the official Amex Platinum, Sapphire Reserve, Membership Rewards and Ultimate Rewards pages. When a page changed, Claude compares it with PerkPilot's rules and lists each difference, with a quote from the page, under **Changes to review**. Approving a change updates the rules database and the audit log; nothing changes without approval.
+
+- Needs `DATABASE_URL` with the tables created **and seeded** (`npx prisma db push` then `npm run db:seed`). Approvals are refused on an empty rules database.
+- Set `CRON_SECRET` (any random string of 16+ characters) in Vercel. Vercel Cron sends it automatically to `/api/cron/watch` (schedule in `vercel.json`). Without it the weekly job does nothing, but **Check all now** still works.
+- Unchanged pages cost nothing — the AI review only runs when a page's text changed. Issuer sites often block servers; then Claude fetches the page itself (each weekly review of a blocked page uses some AI), or you can turn that off per page and use **Paste text** instead.
+- You can add other official pages (for example a benefits terms page) and edit or remove the defaults.
+
+**Card offers** (everyone, Benefits → Offers). Import Amex Offers and Chase Offers from screenshots of the issuer app or pasted offer emails; Claude reads them and you choose which to keep. Offers sync with the household, show expiry reminders, and appear on trips whose hotel or airline matches. Reading offers uses the person's AI allowance and requires AI to be enabled for them; anyone can add offers by hand. Screenshots are downsized in the browser, sent to Claude to read, and not stored.
 
 ## Self-hosting (Docker or a VM)
 

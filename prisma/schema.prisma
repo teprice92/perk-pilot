@@ -427,3 +427,56 @@ model ProviderCache {
 
   @@index([expiresAt])
 }
+
+// ───────────────────────────── Benefits watcher ─────────────────────────────
+
+/// An official page PerkPilot checks for benefit / transfer-partner changes.
+model WatchedSource {
+  id            String         @id @default(cuid())
+  label         String
+  url           String
+  /// card_benefits | transfer_partners
+  kind          String
+  cardId        String?
+  programId     String?
+  enabled       Boolean        @default(true)
+  /// When the page can't be read directly, let Claude fetch it (costs AI usage).
+  aiFetch       Boolean        @default(true)
+  contentHash   String?
+  contentChars  Int?
+  lastCheckedAt DateTime?
+  lastChangedAt DateTime?
+  /// unchanged | changed | blocked | error | reviewed
+  lastStatus    String?
+  lastMessage   String?
+  createdAt     DateTime       @default(now())
+  proposals     RuleProposal[]
+}
+
+/// A change Claude found on a watched page, waiting for the owner's decision.
+model RuleProposal {
+  id          String         @id @default(cuid())
+  sourceId    String?
+  source      WatchedSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  /// add | update | retire
+  action      String
+  /// benefit | transferPartner | transferBonus
+  ruleType    String
+  ruleId      String?
+  title       String
+  explanation String
+  evidence    String
+  /// high | medium | low
+  confidence  String
+  payload     Json
+  /// Same change is never proposed twice (including ones already rejected).
+  fingerprint String         @unique
+  /// pending | approved | rejected | failed
+  status      String         @default("pending")
+  error       String?
+  createdAt   DateTime       @default(now())
+  decidedAt   DateTime?
+  decidedBy   String?
+
+  @@index([status, createdAt])
+}

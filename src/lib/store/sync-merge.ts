@@ -1,4 +1,4 @@
-import type { BenefitOverride, BenefitUsage, Household } from "@/lib/domain/types";
+import type { BenefitOverride, BenefitUsage, CardOffer, Household } from "@/lib/domain/types";
 import type { SavedTrip } from "./app-store";
 
 export interface Snapshot {
@@ -6,6 +6,7 @@ export interface Snapshot {
   usage?: BenefitUsage[];
   overrides?: BenefitOverride[];
   trips?: SavedTrip[];
+  offers?: CardOffer[];
   savedAt?: string;
 }
 
@@ -15,7 +16,7 @@ export interface Snapshot {
  * trips are unioned by id keeping the most recently updated copy; local
  * unsaved drafts are kept on this device only.
  */
-export function mergeSnapshot(local: { trips: SavedTrip[] }, server: Snapshot, opts: { firstSync?: boolean } = {}) {
+export function mergeSnapshot(local: { trips: SavedTrip[]; offers?: CardOffer[] }, server: Snapshot, opts: { firstSync?: boolean } = {}) {
   const byId = new Map<string, SavedTrip>();
   for (const t of server.trips ?? []) byId.set(t.id, t);
   for (const t of local.trips) {
@@ -33,6 +34,8 @@ export function mergeSnapshot(local: { trips: SavedTrip[] }, server: Snapshot, o
     household: server.household,
     usage: server.usage ?? [],
     overrides: server.overrides ?? [],
+    // Snapshots saved before offers existed keep this device's offers.
+    offers: server.offers ?? local.offers ?? [],
     trips: [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
   };
 }

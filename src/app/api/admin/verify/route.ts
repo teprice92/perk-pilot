@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { STALE_AFTER_DAYS, verificationFreshness } from "@/lib/rules/freshness";
 import { invalidate } from "@/lib/server/cache";
@@ -6,8 +5,7 @@ import { getDb } from "@/lib/server/db";
 import { clientKey, rateLimit, tooMany } from "@/lib/server/rate-limit";
 import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/request";
 import { loadRules } from "@/lib/server/rules-db";
-import { authEnabled } from "@/lib/server/auth/config";
-import { getSessionUser } from "@/lib/server/auth/session";
+import { adminActor } from "@/lib/server/auth/admin";
 
 export const runtime = "nodejs";
 
@@ -34,20 +32,8 @@ const Body = z.object({
   amountCents: z.number().int().min(0).max(10_000_000).optional(),
 });
 
-/** Admin token, or the signed-in owner when logins are enabled. */
 async function allowed(req: Request): Promise<boolean> {
-  if (authorized(req)) return true;
-  if (!authEnabled() || !getDb()) return false;
-  return (await getSessionUser(req).catch(() => null))?.role === "owner";
-}
-
-function authorized(req: Request): boolean {
-  const expected = process.env.PERKPILOT_ADMIN_TOKEN;
-  const got = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!expected || expected.length < 32) return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(got);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return (await adminActor(req)) !== null;
 }
 
 export async function GET(req: Request) {

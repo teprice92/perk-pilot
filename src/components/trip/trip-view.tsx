@@ -24,7 +24,7 @@ import { toast } from "@/components/ui/toast";
 import { BookingCard, ExperienceRow } from "./booking-card";
 import { ItineraryBoard } from "./itinerary-board";
 import { ExperiencesTab, FlightsTab, HotelsTab } from "./offers-tabs";
-import { DateAlternativesPanel, TipsPanel, UpgradesPanel } from "./insights";
+import { DateAlternativesPanel, OfferMatchesPanel, TipsPanel, UpgradesPanel } from "./insights";
 import { ComparisonTable, StrategyCompare } from "./strategy-compare";
 import { Panel, TripSummary } from "./summary";
 
@@ -47,6 +47,7 @@ export function TripView({ trip, initialTab = "overview" }: { trip: SavedTrip; i
   const addTrip = useApp((s) => s.addTrip);
   const usage = useApp((s) => s.usage);
   const overrides = useApp((s) => s.overrides);
+  const cardOffers = useApp((s) => s.offers);
   const trips = useApp((s) => s.trips);
   const online = useOnline();
   const [refreshing, setRefreshing] = useState(false);
@@ -203,6 +204,7 @@ export function TripView({ trip, initialTab = "overview" }: { trip: SavedTrip; i
                   <UpgradesPanel plan={plan} rules={rules} />
                   <TipsPanel tips={tips} />
                 </section>
+                <OfferMatchesPanel result={result} plan={plan} offers={cardOffers} today={todayISO()} cardName={(id) => rules.card(id)?.name ?? id} travelerName={(id) => household.travelers.find((t) => t.id === id)?.name ?? id} />
                 <DateAlternativesPanel result={result} selected={trip.selectedStrategy} onRerun={rerunWithShift} busyShift={busyShift} />
                 <section>
                   <h2 className="font-display mb-3 text-2xl">Compare all three</h2>

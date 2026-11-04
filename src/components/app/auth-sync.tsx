@@ -14,7 +14,7 @@ let applying = false;
 
 function localSnapshot() {
   const s = useApp.getState();
-  return { household: s.household, usage: s.usage, overrides: s.overrides, trips: s.trips.filter((t) => t.saved), savedAt: new Date().toISOString(), baseVersion: s.sync.version ?? null };
+  return { household: s.household, usage: s.usage, overrides: s.overrides, offers: s.offers, trips: s.trips.filter((t) => t.saved), savedAt: new Date().toISOString(), baseVersion: s.sync.version ?? null };
 }
 
 function applyServer(snapshot: unknown, version: string | null) {
@@ -24,10 +24,10 @@ function applyServer(snapshot: unknown, version: string | null) {
     return false;
   }
   const firstSync = !useApp.getState().sync.version;
-  const merged = mergeSnapshot({ trips: useApp.getState().trips }, parsed.data as unknown as Snapshot, { firstSync });
+  const merged = mergeSnapshot({ trips: useApp.getState().trips, offers: useApp.getState().offers }, parsed.data as unknown as Snapshot, { firstSync });
   applying = true;
   try {
-    useApp.getState().applySnapshot(merged as { household: Snapshot["household"]; usage: NonNullable<Snapshot["usage"]>; overrides: NonNullable<Snapshot["overrides"]>; trips: SavedTrip[] });
+    useApp.getState().applySnapshot(merged as { household: Snapshot["household"]; usage: NonNullable<Snapshot["usage"]>; overrides: NonNullable<Snapshot["overrides"]>; offers: NonNullable<Snapshot["offers"]>; trips: SavedTrip[] });
   } finally {
     applying = false;
   }
@@ -99,7 +99,7 @@ export function AuthAndSync() {
 
     const unsub = useApp.subscribe((s, prev) => {
       if (!ready.current || applying) return;
-      if (s.household === prev.household && s.usage === prev.usage && s.overrides === prev.overrides && s.trips === prev.trips) return;
+      if (s.household === prev.household && s.usage === prev.usage && s.overrides === prev.overrides && s.offers === prev.offers && s.trips === prev.trips) return;
       useApp.getState().setSync({ pending: true });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void pushNow().catch(() => useApp.getState().setSync({ error: "Offline — will sync when you're back online" })), PUSH_DELAY_MS);

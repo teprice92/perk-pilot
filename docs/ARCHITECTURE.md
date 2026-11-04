@@ -75,6 +75,11 @@
 - **Server (optional):** Prisma 7 with the `@prisma/adapter-pg` driver adapter. The schema models users, households, travelers, owned cards (primary or AU), balances, loyalty accounts (last 4 characters only), the full date-effective rules database, a rule-verification audit log, benefit usage and overrides, trips and a provider cache.
 - **Rules loading:** `/api/rules` and the optimizer read from Postgres when it is configured and seeded, otherwise from the bundled seed. Results are cached for five minutes per instance.
 
+## Benefits watcher and card offers
+
+- `src/lib/watcher/` — `page.ts` fetches an official page and reduces it to text; `run.ts` hashes it and only asks Claude (`extract.ts`, a strict `submit_changes` tool, falling back to the `web_fetch` server tool for pages that block servers) when it changed. Proposals are stored in `RuleProposal` with a fingerprint so the same change is never proposed twice; `apply.ts` writes an approved change and a `RuleVerification` audit row in one transaction. Routes: `/api/admin/watch` (owner) and `/api/cron/watch` (Vercel Cron, `CRON_SECRET`).
+- `src/lib/offers/` — `extract.ts` reads card-linked offers from screenshots or text (strict `submit_offers` tool); `match.ts` flags offers whose merchant matches a plan's hotel chain or airline. Offers live in the household snapshot (`offers`), so they sync like benefit usage. Route: `/api/offers/extract` (AI-enabled users).
+
 ## Authentication
 
 Logins are opt-in (`PERKPILOT_AUTH=passkey`). Without them the app is local-first and needs no account.

@@ -328,6 +328,29 @@ export interface BenefitOverride {
   disabled?: boolean;
 }
 
+/** A card-linked merchant offer (Amex Offers / Chase Offers) the household added. */
+export interface CardOffer {
+  id: string;
+  travelerId: string;
+  /** Card product id (e.g. "amex-platinum"). */
+  cardId: string;
+  merchant: string;
+  description: string;
+  kind: "statement_credit" | "bonus_points" | "percent_back";
+  /** Statement credit or maximum reward, in cents. */
+  rewardCents?: number;
+  rewardPoints?: number;
+  percent?: number;
+  minSpendCents?: number;
+  /** Last day to use the offer. */
+  expires?: ISODate;
+  category: "hotel" | "airline" | "travel" | "car_rental" | "dining" | "entertainment" | "shopping" | "other";
+  terms?: string;
+  source: "screenshot" | "text" | "manual";
+  addedAt: string;
+  used?: boolean;
+}
+
 /* ─────────────────────────── Trip search ─────────────────────────── */
 
 /** One stop of a multi-city trip, in visiting order. */

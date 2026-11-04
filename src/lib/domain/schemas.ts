@@ -102,6 +102,25 @@ export const BenefitOverrideSchema = z.object({
   disabled: z.boolean().optional(),
 });
 
+export const CardOfferSchema = z.object({
+  id: z.string().min(1).max(60),
+  travelerId: z.string().min(1).max(60),
+  cardId: z.string().min(1).max(80),
+  merchant: z.string().min(1).max(120),
+  description: z.string().max(400),
+  kind: z.enum(["statement_credit", "bonus_points", "percent_back"]),
+  rewardCents: z.number().int().min(0).max(10_000_000).optional(),
+  rewardPoints: z.number().int().min(0).max(10_000_000).optional(),
+  percent: z.number().min(0).max(100).optional(),
+  minSpendCents: z.number().int().min(0).max(100_000_000).optional(),
+  expires: isoDate.optional(),
+  category: z.enum(["hotel", "airline", "travel", "car_rental", "dining", "entertainment", "shopping", "other"]),
+  terms: z.string().max(600).optional(),
+  source: z.enum(["screenshot", "text", "manual"]),
+  addedAt: z.string().max(40),
+  used: z.boolean().optional(),
+});
+
 export const OptimizeBodySchema = z.object({
   request: TripRequestSchema,
   household: HouseholdSchema,
@@ -144,4 +163,5 @@ export const DataImportSchema = z.object({
   usage: z.array(BenefitUsageSchema).max(2000).optional(),
   overrides: z.array(BenefitOverrideSchema).max(500).optional(),
   trips: z.array(TripSnapshotSchema).max(50).optional(),
+  offers: z.array(CardOfferSchema).max(400).optional(),
 });

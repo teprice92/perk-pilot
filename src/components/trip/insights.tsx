@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowUpRight, CalendarDays, Crown, Lightbulb, Loader2 } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Crown, Lightbulb, Loader2, Tag } from "lucide-react";
 import Link from "next/link";
 import { formatPoints, formatUSD } from "@/lib/calc/money";
+import type { CardOffer } from "@/lib/domain/types";
+import { matchOffers } from "@/lib/offers/match";
 import type { OptimizationResult, Plan, StrategyId } from "@/lib/optimizer/types";
 import { STRATEGIES } from "@/lib/optimizer/types";
 import type { RulesRepository } from "@/lib/rules/repository";
@@ -108,6 +110,28 @@ export function TipsPanel({ tips, title = "Household points strategy", limit = 5
           </li>
         ))}
       </ul>
+    </Panel>
+  );
+}
+
+export function OfferMatchesPanel({ result, plan, offers, today, cardName, travelerName }: { result: OptimizationResult; plan: Plan; offers: CardOffer[]; today: string; cardName: (id: string) => string; travelerName: (id: string) => string }) {
+  const matches = matchOffers(result, plan, offers, today);
+  if (!matches.length) return null;
+  return (
+    <Panel icon={<Tag />} title="Card offers that match this trip">
+      <ul className="space-y-2">
+        {matches.map((m) => (
+          <li key={`${m.offer.id}-${m.slot}`} className="rounded-2xl border border-border p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">{m.offer.merchant} · {m.offer.rewardCents ? formatUSD(m.offer.rewardCents) : m.offer.rewardPoints ? `${formatPoints(m.offer.rewardPoints)} pts` : m.offer.percent ? `${m.offer.percent}% back` : "offer"}</p>
+              <Badge variant="gold">{cardName(m.offer.cardId)} · {travelerName(m.offer.travelerId)}</Badge>
+            </div>
+            <p className="mt-1 text-xs text-fg-muted">{m.offer.description}{m.offer.expires ? ` · expires ${formatDate(m.offer.expires)}` : ""}</p>
+            <p className="mt-1 text-xs text-fg-subtle">Matches {m.booking}. {m.reason}</p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11px] text-fg-subtle">Offers aren&apos;t included in the plan totals. Check the offer terms before booking.</p>
     </Panel>
   );
 }

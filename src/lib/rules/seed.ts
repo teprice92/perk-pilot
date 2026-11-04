@@ -23,12 +23,12 @@ import type {
 
 const SEED_NOTE = "Starter dataset — confirm at the official source before relying on it.";
 
-const AMEX_PLAT_URL = "https://www.americanexpress.com/us/credit-cards/card/platinum/";
-const AMEX_MR_TRANSFER_URL = "https://global.americanexpress.com/rewards/transfer";
+export const AMEX_PLAT_URL = "https://www.americanexpress.com/us/credit-cards/card/platinum/";
+export const AMEX_MR_TRANSFER_URL = "https://global.americanexpress.com/rewards/transfer";
 const AMEX_FHR_URL = "https://www.americanexpress.com/en-us/travel/fine-hotels-resorts/";
 const AMEX_THC_URL = "https://www.americanexpress.com/en-us/travel/the-hotel-collection/";
-const CSR_URL = "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve";
-const CHASE_UR_URL = "https://www.chase.com/personal/credit-cards/ultimate-rewards";
+export const CSR_URL = "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve";
+export const CHASE_UR_URL = "https://www.chase.com/personal/credit-cards/ultimate-rewards";
 const CHASE_TRAVEL_URL = "https://www.chase.com/travel";
 
 const u = (sourceUrl: string, notes = SEED_NOTE) => ({

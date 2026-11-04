@@ -156,7 +156,7 @@ function DataSection({ syncConfigured, automatic }: { syncConfigured: boolean; a
       setToken(localStorage.getItem("pp-sync-token") ?? "");
     } catch {}
   }, []);
-  const snapshot = () => ({ household: state.household, usage: state.usage, overrides: state.overrides, trips: state.trips.filter((t) => t.saved), savedAt: new Date().toISOString() });
+  const snapshot = () => ({ household: state.household, usage: state.usage, overrides: state.overrides, offers: state.offers, trips: state.trips.filter((t) => t.saved), savedAt: new Date().toISOString() });
   const exportAll = () => {
     const blob = new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
