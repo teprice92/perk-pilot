@@ -140,7 +140,8 @@ export function HotelsTab({ result, plan, rules }: { result: OptimizationResult;
                     {h.id === chosen && <Badge variant="accent">In your plan</Badge>}
                     <DataKindBadge kind={h.dataKind} />
                   </div>
-                  <p className="text-sm text-fg-muted">{h.neighborhood} · {"★".repeat(h.stars)} · {h.tier} · rated {h.rating.toFixed(1)}</p>
+                  <p className="text-sm text-fg-muted">{h.neighborhood} · {h.tierEstimated ? `${h.tier} (est.)` : `${"★".repeat(h.stars)} · ${h.tier}`}{h.ratingUnknown ? "" : ` · rated ${h.rating.toFixed(1)}`}</p>
+                  {h.sourceNotes && h.sourceNotes.length > 0 && <p className="mt-1 text-xs text-warning">{h.sourceNotes.join(" ")}</p>}
                   <p className="mt-1 text-sm text-fg-muted">{h.description}</p>
                   <p className="mt-1 text-xs text-fg-subtle">{h.amenities.join(" · ")} · {h.cancellationPolicy}{h.resortFeePerNightCents ? ` · resort fee ${formatUSD(h.resortFeePerNightCents)}/night` : ""}</p>
                 </div>

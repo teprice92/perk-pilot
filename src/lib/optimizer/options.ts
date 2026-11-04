@@ -372,7 +372,12 @@ export function hotelOptions(h: HotelOffer, ctx: OptionContext, slotId = "hotel"
       const partnerTotal = h.award.pointsPerNight * (nights - freeNights) * rooms;
       const waivesResort = program.id === "hyatt";
       const cashOnAward = waivesResort ? 0 : resort;
+      const availabilityNote =
+        h.award.availability === "cached"
+          ? `${h.provider} saw award space for these dates${h.fetchedAt ? ` (checked ${new Date(h.fetchedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })})` : ""} — confirm on ${program.shortName} before transferring.`
+          : "Award availability is estimated — confirm before transferring.";
       const notes = [
+        ...(h.sourceNotes ?? []),
         ...(freeNights ? [`Includes ${freeNights} free night(s) from the program's 5th-night benefit (verify eligibility).`] : []),
         ...(cashOnAward ? [`Resort fees of about ${(cashOnAward / 100).toFixed(0)} USD are usually still charged on award stays.`] : []),
       ];
@@ -399,7 +404,7 @@ export function hotelOptions(h: HotelOffer, ctx: OptionContext, slotId = "hotel"
           perksValueCents: 0,
           flexibility: "refundable",
           steps: awardSteps(`Redeem ${formatPoints(partnerTotal)} ${program.shortName} points you already hold.`),
-          warnings: ["Award availability is estimated — confirm before booking.", ...notes],
+          warnings: [availabilityNote, ...notes],
           bookingUrl: program.awardSearchUrl ?? h.bookingUrl,
           ruleRefs: [],
           confidence: conf([], h.award.availability),
@@ -434,7 +439,7 @@ export function hotelOptions(h: HotelOffer, ctx: OptionContext, slotId = "hotel"
           steps: awardSteps(
             `Transfer ${formatPoints(quote.sourcePoints)} ${bankName} → ${formatPoints(quote.partnerPointsReceived)} ${program.shortName} (${partner.ratioFrom}:${partner.ratioTo}${quote.bonusPercent ? ` + ${quote.bonusPercent}% bonus` : ""})${topUp ? `, plus ${formatPoints(topUp)} you already hold` : ""}. Transfers are irreversible.`,
           ),
-          warnings: ["Award availability is estimated — confirm before transferring.", ...notes],
+          warnings: [availabilityNote, ...notes],
           bookingUrl: program.awardSearchUrl ?? h.bookingUrl,
           ruleRefs: [partner.id, ...(bonus ? [bonus.id] : [])],
           confidence: conf([partner.id, ...(bonus ? [bonus.id] : [])], h.award.availability),

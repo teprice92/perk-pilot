@@ -5,9 +5,11 @@ import { buildExperiences, buildHotels, destinationById } from "./demo/destinati
 import { generateFlights, generateLeg } from "./demo/flights";
 import { duffelFlightProvider, duffelInfo } from "./live/duffel";
 import { googlePlacesInfo, googlePlacesProvider } from "./live/google-places";
+import { roomsAeroInfo, roomsAeroProvider } from "./live/rooms-aero";
 import { seatsAeroInfo, seatsAeroProvider } from "./live/seats-aero";
 import { unsplashInfo } from "./live/unsplash";
 import type { AwardProvider, ExperienceProvider, FlightProvider, HotelProvider, ProviderInfo } from "./types";
+import type { HotelOffer } from "@/lib/domain/types";
 
 /* ───────────── Demo providers (always available, clearly labelled) ───────────── */
 
@@ -111,9 +113,32 @@ export function getFlightProvider(): FlightProvider {
   return withAwards(cash, seatsAeroInfo().configured ? seatsAeroProvider : null);
 }
 
+/**
+ * Adds real award-night hotels (cached) to a base hotel source. The demo
+ * catalogue stays for card hotel programs (FHR / THC / The Edit), which award
+ * sources don't cover; every offer keeps its own dataKind label.
+ */
+export function withHotelAwards(base: HotelProvider, awards: HotelProvider | null): HotelProvider {
+  if (!awards) return base;
+  return {
+    info: () => ({ ...base.info(), name: `${base.info().name} + ${awards.info().name}` }),
+    async searchHotels(params) {
+      const [b, a] = await Promise.all([
+        base.searchHotels(params),
+        awards.searchHotels(params).catch((e): HotelOffer[] => {
+          console.error(`[perkpilot] ${awards.info().name} failed`, e instanceof Error ? e.message : e);
+          return [];
+        }),
+      ]);
+      return [...a, ...b];
+    },
+  };
+}
+
 export function getHotelProvider(): HotelProvider {
-  // No live hotel provider is wired in (Amadeus Self-Service was retired in 2026).
-  return demoHotelProvider;
+  // No live cash-rate hotel provider (Amadeus Self-Service was retired in 2026);
+  // Rooms.aero adds real award nights when enabled.
+  return withHotelAwards(demoHotelProvider, roomsAeroInfo().configured ? roomsAeroProvider : null);
 }
 
 export function getExperienceProvider(): ExperienceProvider {
@@ -127,6 +152,7 @@ export function providerCatalogue(): ProviderInfo[] {
     demoExperienceProvider.info(),
     duffelInfo(),
     seatsAeroInfo(),
+    roomsAeroInfo(),
     googlePlacesInfo(),
     unsplashInfo(),
     {

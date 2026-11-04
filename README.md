@@ -24,6 +24,7 @@ PerkPilot is a mobile-first web app that plans trips around a household's credit
 | Installable PWA with an offline indicator | ✅ |
 | Live cash fares — Duffel (opt-in) | ✅ adapter + mocked tests (needs your credentials) |
 | Cached award availability — Seats.aero (opt-in) | ✅ adapter, merged at route/date/cabin level, labelled "seen in cached search" |
+| Real hotel award nights — Rooms.aero (opt-in, same Seats.aero Pro key) | ✅ Hyatt, Marriott, Hilton, IHG, Choice; points + cash for real cents-per-point |
 | Live destination experiences — Google Places (opt-in) | ✅ prices labelled "estimated", Google attribution |
 | Destination photography — Unsplash (opt-in) | ✅ with photographer attribution; generative art otherwise |
 | Verified benefits workflow (admin API + audit log + 90-day staleness) | ✅ |
@@ -67,6 +68,7 @@ With no environment variables set, the app runs in **guest demo mode**: a sample
 | `PERKPILOT_SYNC_TOKEN` | Syncing household data between both travelers' devices (self-hosted) |
 | `DUFFEL_ACCESS_TOKEN` + `PERKPILOT_LIVE_FLIGHTS=duffel` | Live cash fares (Duffel) |
 | `SEATS_AERO_API_KEY` + `PERKPILOT_LIVE_AWARDS=seats-aero` | Cached award availability merged into any flight source |
+| `SEATS_AERO_API_KEY` + `PERKPILOT_LIVE_HOTEL_AWARDS=rooms-aero` | Real hotel award nights from Rooms.aero (same key) |
 | `GOOGLE_PLACES_API_KEY` + `PERKPILOT_LIVE_EXPERIENCES=google-places` | Live destination experiences |
 | `UNSPLASH_ACCESS_KEY` | Destination photography |
 | `PERKPILOT_ADMIN_TOKEN` (+ `DATABASE_URL`) | The rule-verification admin API |

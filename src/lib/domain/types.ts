@@ -412,6 +412,12 @@ export interface HotelOffer {
   tier: "upscale" | "luxury";
   stars: number;
   rating: number;
+  /** True when the source gives no guest rating (rating is then a neutral placeholder). */
+  ratingUnknown?: boolean;
+  /** Tier/stars were inferred (e.g. from award category), not reported. */
+  tierEstimated?: boolean;
+  /** Free-text caveats from the source, shown with the hotel. */
+  sourceNotes?: string[];
   chainProgramId?: string;
   neighborhood: string;
   lat: number;
