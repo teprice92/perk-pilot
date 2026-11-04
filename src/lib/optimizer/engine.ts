@@ -1,3 +1,4 @@
+import { airportInfo } from "@/lib/geo/airports";
 import type {
   BenefitUsage,
   Cabin,
@@ -82,6 +83,7 @@ export async function fetchTripData(request: TripRequest, household: Household):
   const destinations = stops.map((s) => {
     const d = destinationById(s.destinationId);
     if (!d) throw new Error(`Unknown destination: ${s.destinationId}`);
+    if (!d.airports.every((a) => airportInfo(a))) throw new Error(`Unknown airport for ${d.name}`);
     return d;
   });
   const first = destinations[0]!;

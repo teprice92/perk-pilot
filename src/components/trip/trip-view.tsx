@@ -124,7 +124,7 @@ export function TripView({ trip, initialTab = "overview" }: { trip: SavedTrip; i
     <div>
       <DestinationArt destination={result.destination} className="h-64 md:h-80" photo={photo}>
         <div className="mx-auto flex h-full max-w-7xl flex-col justify-end px-4 pb-6 text-white sm:px-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">{result.destinations?.length > 1 ? `Multi-city · ${destNames}` : `${result.destination.country} · ${result.destination.region}`}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">{result.destinations?.length > 1 ? `Multi-city · ${destNames}` : [result.destination.country, result.destination.region].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")}</p>
           <h1 className="font-display text-4xl leading-tight md:text-6xl">{trip.name}</h1>
           <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/85">
             <span className="inline-flex items-center gap-1.5"><CalendarRange className="size-4" />{formatDate(result.request.departDate, { month: "short", day: "numeric" })} – {formatDate(result.request.returnDate, { month: "short", day: "numeric", year: "numeric" })} · {result.nights} nights</span>

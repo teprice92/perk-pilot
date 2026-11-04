@@ -1,3 +1,4 @@
+import { searchPlaces } from "@/lib/geo/place-search";
 import { z } from "zod";
 import type { BenefitUsage, Household, TripRequest } from "@/lib/domain/types";
 import { centsPerPoint } from "@/lib/calc/cpp";
@@ -42,8 +43,13 @@ const CppInput = z.object({ cashPriceUsd: z.number().min(0), taxesUsd: z.number(
 export const TOOL_DEFINITIONS = [
   {
     name: "list_destinations",
-    description: "List destinations PerkPilot has data for (demo catalogue), with ids, best months and airports. Call this before optimize_trip to get a valid destinationId.",
+    description: "List PerkPilot's catalogue destinations (richest demo data), with ids, best months and airports. For anywhere else, use search_places.",
     input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
+  },
+  {
+    name: "search_places",
+    description: "Find any city or place in the world that has an airport within reach. Returns destination ids usable in optimize_trip (catalogue ids or 'place:…' ids). Use when the user names somewhere not in list_destinations.",
+    input_schema: { type: "object" as const, properties: { query: { type: "string", description: "Place name, e.g. 'Porto' or 'Tulum, Mexico'" } }, required: ["query"], additionalProperties: false },
   },
   {
     name: "get_household_summary",
@@ -157,6 +163,11 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
   switch (name) {
     case "list_destinations":
       return DESTINATIONS.map((d) => ({ id: d.id, name: d.name, country: d.country, region: d.region, airports: d.airports, bestMonths: d.bestMonths, tagline: d.tagline }));
+    case "search_places": {
+      const input = z.object({ query: z.string().min(2).max(80) }).parse(rawInput);
+      const { results } = await searchPlaces(input.query);
+      return results.length ? results.map((r) => ({ id: r.id, name: r.name, detail: r.detail, airports: r.airports, catalogue: r.kind === "catalog", note: r.note })) : { error: `No place with an airport nearby matches "${input.query}".` };
+    }
     case "get_household_summary": {
       const pts = householdPoints(household, rules);
       const credits = creditStatuses(household, usage, rules, today);
@@ -197,7 +208,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
     }
     case "optimize_trip": {
       const input = OptimizeInput.parse(rawInput);
-      if (!destinationById(input.destinationId)) return { error: `Unknown destinationId "${input.destinationId}". Call list_destinations.` };
+      if (!destinationById(input.destinationId)) return { error: `Unknown destinationId "${input.destinationId}". Call list_destinations or search_places.` };
       if (input.returnDate <= input.departDate) return { error: "returnDate must be after departDate" };
       if (input.adults + input.children > 9) return { error: "Up to 9 travelers per search." };
       const tripNights = Math.round((Date.parse(input.returnDate) - Date.parse(input.departDate)) / 86_400_000);

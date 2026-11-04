@@ -74,7 +74,82 @@ const BASE_AIRPORTS: Record<string, { city: string; lat: number; lng: number; co
 export const AIRPORTS: Record<string, { city: string; lat: number; lng: number; country: string; tz?: number }> = { ...BASE_AIRPORTS, ...MORE_AIRPORTS };
 
 export function destinationById(id: string): Destination | undefined {
-  return DESTINATIONS.find((d) => d.id === id);
+  return DESTINATIONS.find((d) => d.id === id) ?? parsePlaceId(id);
+}
+
+/* ─────────── Any-city destinations ───────────
+ * A place found by search is encoded entirely in its id, so every part of the
+ * app (server, client, saved trips) can rebuild it without a lookup:
+ *   place:<lat>:<lng>:<AIRPORT[.AIRPORT]>:<ISO country>:<name>[:<region>]
+ */
+
+export interface PlaceInput {
+  name: string;
+  region?: string;
+  countryCode: string;
+  lat: number;
+  lng: number;
+  airports: string[];
+}
+
+const PLACE_PALETTES: Array<[string, string, string]> = [
+  ["#1d3557", "#457b9d", "#f1e3c6"],
+  ["#283d3b", "#197278", "#edddd4"],
+  ["#3d2c2e", "#b5654a", "#f2d6b3"],
+  ["#22223b", "#9a8c98", "#f2e9e4"],
+  ["#14213d", "#c9a35e", "#f5ead3"],
+  ["#1b4332", "#52b788", "#e9f5db"],
+];
+
+const cleanText = (s: string, max: number) => s.replace(/[:\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+
+export function placeId(p: PlaceInput): string {
+  const parts = ["place", p.lat.toFixed(3), p.lng.toFixed(3), p.airports.slice(0, 2).join("."), p.countryCode.toUpperCase(), cleanText(p.name, 60)];
+  const region = p.region ? cleanText(p.region, 40) : "";
+  return region ? `${parts.join(":")}:${region}` : parts.join(":");
+}
+
+function countryName(code: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+export function parsePlaceId(id: string): Destination | undefined {
+  if (!id.startsWith("place:") || id.length > 160) return undefined;
+  const [, latS, lngS, airportsS, cc, name, region] = id.split(":");
+  const lat = Number(latS);
+  const lng = Number(lngS);
+  const airports = (airportsS ?? "").split(".");
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return undefined;
+  if (!airports.length || airports.length > 2 || !airports.every((a) => /^[A-Z]{3}$/.test(a))) return undefined;
+  if (!cc || !/^[A-Z]{2}$/.test(cc) || !name || cleanText(name, 60) !== name || (region !== undefined && cleanText(region, 40) !== region)) return undefined;
+  const country = countryName(cc);
+  const hash = [...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const tropical = Math.abs(lat) < 23.5;
+  return {
+    id,
+    name,
+    country,
+    region: region ?? "",
+    aliases: [name.toLowerCase()],
+    airports,
+    lat,
+    lng,
+    tagline: region ? `${region}, ${country}` : country,
+    blurb: `${name} — found by search. Flights are planned via ${airports.join(" / ")}; hotels and experiences use labelled demo templates unless live providers are enabled.`,
+    palette: PLACE_PALETTES[hash % PLACE_PALETTES.length]!,
+    emoji: "📍",
+    costIndex: 1,
+    bestMonths: tropical ? [12, 1, 2, 3, 4] : lat > 0 ? [4, 5, 6, 9, 10] : [10, 11, 12, 1, 2, 3],
+    neighborhoods: [`Central ${name}`, `${name} Old Town`, `${name} Waterfront`, `Greater ${name}`],
+  };
+}
+
+export function isPlaceId(id: string): boolean {
+  return id.startsWith("place:");
 }
 
 export function findDestination(query: string): Destination | undefined {

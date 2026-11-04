@@ -1,6 +1,7 @@
 import type { AwardOption, Cabin, FlightOffer } from "@/lib/domain/types";
 import { PROGRAMS } from "@/lib/rules/seed";
-import { AIRPORTS, CARRIERS, routesFor } from "./destinations";
+import { airportInfo } from "@/lib/geo/airports";
+import { CARRIERS, routesFor } from "./destinations";
 import { haversineKm, kmToMiles } from "./geo";
 import { seeded } from "./random";
 import { googleFlightsUrl } from "@/lib/links";
@@ -19,7 +20,7 @@ const TZ: Record<string, number> = {
   HND: 9, NRT: 9, KIX: 9, CDG: 1, ORY: 1, LHR: 0, LGW: 0, FCO: 1, LIS: 0, CUN: -5, DPS: 8, KEF: 0,
 };
 
-const tzOf = (code: string): number => TZ[code] ?? AIRPORTS[code]?.tz ?? 0;
+const tzOf = (code: string): number => TZ[code] ?? airportInfo(code)?.tz ?? 0;
 
 const BANDS = [700, 1500, 3000, 5000, 7000, Infinity];
 const BASE_ECON = [7500, 12500, 20000, 30000, 40000, 47500];
@@ -82,8 +83,8 @@ function cabinsFor(carrier: string, miles: number): Cabin[] {
 }
 
 function awardTaxesUSD(origin: string, dest: string, cabin: Cabin, rnd: () => number): number {
-  const oC = AIRPORTS[origin]?.country;
-  const dC = AIRPORTS[dest]?.country;
+  const oC = airportInfo(origin)?.country;
+  const dC = airportInfo(dest)?.country;
   if (oC === "US" && dC === "US") return 5.6;
   let base = 35 + rnd() * 50;
   if (oC === "GB") base += cabin === "economy" ? 105 : 245; // UK departure duty on premium cabins
@@ -152,15 +153,15 @@ export function generateFlights(params: FlightSearchParams & { destinationId: st
   const fetchedAt = new Date().toISOString();
   const routes = routesFor(params.destinationId);
   const warnings: string[] = [];
-  if (!AIRPORTS[params.origin]) warnings.push(`Origin ${params.origin} is not in the demo airport list; distances are approximate.`);
+  if (!airportInfo(params.origin)) warnings.push(`Origin ${params.origin} is not in the demo airport list; distances are approximate.`);
 
   const makeOffers = (direction: "outbound" | "return", date: string, cheapestOnly = false): FlightOffer[] => {
     const offers: FlightOffer[] = [];
     for (const destAirport of params.destinationAirports) {
       const from = direction === "outbound" ? params.origin : destAirport;
       const to = direction === "outbound" ? destAirport : params.origin;
-      const a = AIRPORTS[from] ?? AIRPORTS.LAX!;
-      const z = AIRPORTS[to] ?? AIRPORTS.LAX!;
+      const a = airportInfo(from) ?? airportInfo("LAX")!;
+      const z = airportInfo(to) ?? airportInfo("LAX")!;
       const miles = Math.round(kmToMiles(haversineKm(a.lat, a.lng, z.lat, z.lng)));
       const domestic = a.country === "US" && z.country === "US";
       for (const r of routes) {
@@ -236,10 +237,10 @@ const EUROPE = new Set(["FR", "GB", "IT", "PT", "IS", "ES", "NL", "GR", "IE", "C
 const NORTH_AMERICA = new Set(["US", "CA", "MX"]);
 
 const REGIONAL: Array<{ test: (a: string, b: string) => boolean; carriers: string[] }> = [
-  { test: (a, b) => AIRPORTS[a]?.country === "JP" && AIRPORTS[b]?.country === "JP", carriers: ["NH", "JL"] },
-  { test: (a, b) => AIRPORTS[a]?.country === "US" && AIRPORTS[b]?.country === "US", carriers: ["UA", "DL", "AA", "AS", "WN"] },
-  { test: (a, b) => EUROPE.has(AIRPORTS[a]?.country ?? "") && EUROPE.has(AIRPORTS[b]?.country ?? ""), carriers: ["BA", "AF", "TP", "FI"] },
-  { test: (a, b) => NORTH_AMERICA.has(AIRPORTS[a]?.country ?? "") && NORTH_AMERICA.has(AIRPORTS[b]?.country ?? ""), carriers: ["UA", "DL", "AA", "AC"] },
+  { test: (a, b) => airportInfo(a)?.country === "JP" && airportInfo(b)?.country === "JP", carriers: ["NH", "JL"] },
+  { test: (a, b) => airportInfo(a)?.country === "US" && airportInfo(b)?.country === "US", carriers: ["UA", "DL", "AA", "AS", "WN"] },
+  { test: (a, b) => EUROPE.has(airportInfo(a)?.country ?? "") && EUROPE.has(airportInfo(b)?.country ?? ""), carriers: ["BA", "AF", "TP", "FI"] },
+  { test: (a, b) => NORTH_AMERICA.has(airportInfo(a)?.country ?? "") && NORTH_AMERICA.has(airportInfo(b)?.country ?? ""), carriers: ["UA", "DL", "AA", "AC"] },
 ];
 
 /**
@@ -253,8 +254,8 @@ export function generateLeg(p: LegSearchParams): FlightOffer[] {
   const toRoutes = routesFor(p.toDestinationId ?? "").map((r) => r.carrier);
   for (const from of p.from) {
     for (const to of p.to) {
-      const a = AIRPORTS[from];
-      const z = AIRPORTS[to];
+      const a = airportInfo(from);
+      const z = airportInfo(to);
       if (!a || !z) continue;
       const miles = Math.round(kmToMiles(haversineKm(a.lat, a.lng, z.lat, z.lng)));
       const domestic = a.country === "US" && z.country === "US";

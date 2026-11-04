@@ -1,6 +1,7 @@
 import type { ExperienceOffer, HotelOffer, TravelStyle } from "@/lib/domain/types";
 import { googleHotelsUrl } from "@/lib/links";
-import { AIRPORTS, DESTINATIONS, destinationById, findDestination, detectDestinationInText } from "./catalog";
+import { airportInfo } from "@/lib/geo/airports";
+import { AIRPORTS, DESTINATIONS, destinationById, findDestination, detectDestinationInText, isPlaceId } from "./catalog";
 
 export { AIRPORTS, DESTINATIONS, destinationById, findDestination, detectDestinationInText };
 
@@ -393,12 +394,13 @@ export function routesFor(destinationId: string): Array<{ carrier: string; nonst
   const dest = destinationById(destinationId);
   const airport = dest?.airports[0];
   if (!dest || !airport) return [];
-  const country = AIRPORTS[airport]?.country ?? "US";
+  const info = airportInfo(airport);
+  const country = info?.country ?? "US";
   return carriersForCountry(country)
     .filter((c) => CARRIERS[c])
     .map((c) => {
       const usHubs = CARRIERS[c]!.hubs.filter((h) => US_HUBS.has(h) && h !== airport);
-      const nonstop = country === "US" || GATEWAYS.has(airport) ? usHubs : [];
+      const nonstop = country === "US" || GATEWAYS.has(airport) || (isPlaceId(destinationId) && info?.large && !CONNECT[airport] && ["CA", "MX", "GB", "FR", "DE", "ES", "IT", "NL", "IE", "JP", "KR", "AE"].includes(country)) ? usHubs : [];
       const via = HOME_HUB[c] ?? (nonstop.length ? usHubs[0] : CONNECT[airport]) ?? usHubs[0] ?? "LAX";
       return { carrier: c, nonstop: nonstop.slice(0, 8), via };
     });

@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { Cabin, TravelStyle, TripStop } from "@/lib/domain/types";
 import { useOnline } from "@/lib/hooks/use-online";
-import { AIRPORTS, DESTINATIONS, findDestination } from "@/lib/providers/demo/catalog";
+import { AIRPORTS, DESTINATIONS, destinationById, findDestination } from "@/lib/providers/demo/catalog";
+import { PlaceInput, type PlacePick } from "@/components/trip/place-input";
 import type { OptimizationResult } from "@/lib/optimizer/types";
 import { useApp } from "@/lib/store/app-store";
 import { addDaysISO, cn, todayISO } from "@/lib/utils";
@@ -50,6 +51,8 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   const tomorrow = addDaysISO(todayISO(), 1);
   const defaultDepart = addDaysISO(todayISO(), 60);
   const [destination, setDestination] = useState(prefill?.destination ?? "");
+  const [picked, setPicked] = useState<PlacePick | null>(null);
+  const [stopDrafts, setStopDrafts] = useState<Record<number, string>>({});
   const [origin, setOrigin] = useState(household.homeAirport);
   const [departDate, setDepartDate] = useState(prefill?.departDate ?? defaultDepart);
   const [returnDate, setReturnDate] = useState(prefill?.returnDate ?? addDaysISO(defaultDepart, 7));
@@ -66,7 +69,10 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (prefill?.destination) setDestination(prefill.destination);
+    if (prefill?.destination) {
+      setDestination(prefill.destination);
+      setPicked(null);
+    }
   }, [prefill?.destination]);
   useEffect(() => {
     setOrigin(household.homeAirport);
@@ -81,7 +87,7 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
     setOrigin(byCity ? byCity[0] : code);
   }
 
-  const match = useMemo(() => findDestination(destination), [destination]);
+  const match = useMemo(() => (picked ? destinationById(picked.id) : findDestination(destination)), [picked, destination]);
   const multiNights = stops.reduce((a, x) => a + x.nights, 0);
   const effectiveReturn = multi ? addDaysISO(departDate, multiNights) : returnDate;
   const nights = Math.round((Date.parse(effectiveReturn) - Date.parse(departDate)) / 86_400_000);
@@ -92,12 +98,17 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const draft = Object.keys(stopDrafts)[0];
+    if (multi && draft !== undefined) {
+      setError(`Pick city ${Number(draft) + 1} from the suggestions as you type.`);
+      return;
+    }
     if (multi && new Set(stops.map((x) => x.destinationId)).size !== stops.length) {
       setError("Each city in a multi-city trip should be different.");
       return;
     }
     if (!multi && !match) {
-      setError(destination ? `We don't cover “${destination}” yet — PerkPilot plans ${DESTINATIONS.length} destinations. Start typing to see them, e.g. ${DESTINATIONS.slice(12, 17).map((d) => d.name).join(", ")}…` : "Where would you like to go?");
+      setError(destination ? `Pick “${destination}” from the suggestions as you type — any city with an airport nearby works.` : "Where would you like to go?");
       return;
     }
     if (!originValid) {
@@ -164,13 +175,23 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
               {stops.map((st, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="w-4 text-xs text-fg-subtle tabular">{i + 1}</span>
-                  <select aria-label={`City ${i + 1}`} value={st.destinationId} onChange={(e) => setStops(stops.map((x, k) => (k === i ? { ...x, destinationId: e.target.value } : x)))} className="min-w-36 flex-1 rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none">
-                    {DESTINATIONS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
+                  <PlaceInput
+                    ariaLabel={`City ${i + 1}`}
+                    text={stopDrafts[i] ?? destinationById(st.destinationId)?.name ?? ""}
+                    onText={(t) => setStopDrafts({ ...stopDrafts, [i]: t })}
+                    onPick={(p) => {
+                      setStops(stops.map((x, k) => (k === i ? { ...x, destinationId: p.id } : x)));
+                      const rest = { ...stopDrafts };
+                      delete rest[i];
+                      setStopDrafts(rest);
+                    }}
+                    className="min-w-36 flex-1"
+                    inputClassName={cn("w-full rounded-lg bg-muted px-2 py-1 text-sm font-medium outline-none", stopDrafts[i] !== undefined && "ring-1 ring-warning/60")}
+                  />
                   <div className="flex items-center gap-2">
                     <Stepper value={st.nights} set={(n) => setStops(stops.map((x, k) => (k === i ? { ...x, nights: Math.max(1, n) } : x)))} min={1} max={30} label={`nights in city ${i + 1}`} />
                     <span className="w-12 whitespace-nowrap text-xs text-fg-subtle">{st.nights === 1 ? "night" : "nights"}</span>
-                    {stops.length > 2 && <button type="button" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove city ${i + 1}`} className="text-fg-subtle hover:text-danger"><X className="size-4" /></button>}
+                    {stops.length > 2 && <button type="button" onClick={() => { setStops(stops.filter((_, k) => k !== i)); setStopDrafts({}); }} aria-label={`Remove city ${i + 1}`} className="text-fg-subtle hover:text-danger"><X className="size-4" /></button>}
                   </div>
                 </li>
               ))}
@@ -182,22 +203,21 @@ export function SearchForm({ prefill, compact }: { prefill?: SearchPrefill; comp
           <label htmlFor="pp-dest" className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
             <MapPin className="size-3.5" /> Where to
           </label>
-          <input
+          <PlaceInput
             id="pp-dest"
-            list={listId}
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder="Tokyo, Hawaii, Paris…"
-            className="mt-0.5 w-full bg-transparent text-base font-medium outline-none placeholder:text-fg-subtle"
-            autoComplete="off"
-            required
+            text={destination}
+            onText={(t) => {
+              setDestination(t);
+              setPicked(null);
+            }}
+            onPick={(p) => {
+              setPicked(p);
+              setDestination(p.name);
+            }}
+            placeholder="Any city — Tokyo, Porto, Tulum…"
+            inputClassName="mt-0.5 w-full bg-transparent text-base font-medium outline-none placeholder:text-fg-subtle"
           />
-          <datalist id={listId}>
-            {DESTINATIONS.map((d) => (
-              <option key={d.id} value={d.name}>{`${d.country} · ${d.tagline}`}</option>
-            ))}
-          </datalist>
-          <p className="h-4 text-[11px] text-fg-subtle">{match ? `${match.emoji} ${match.name}, ${match.country} · ${match.airports.join(" / ")}` : destination ? "Not in the catalogue yet" : ""}</p>
+          <p className="h-4 text-[11px] text-fg-subtle">{match ? `${match.emoji} ${match.name}, ${match.country} · ${match.airports.join(" / ")}` : destination ? "Choose from the suggestions" : ""}</p>
         </div>
         )}
         <DateRangePicker
